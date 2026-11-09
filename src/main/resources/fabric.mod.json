@@ -1,0 +1,37 @@
+{
+	"schemaVersion": 1,
+	"id": "lightbox",
+	"version": "${version}",
+	"name": "Lightbox",
+	"description": "The perfect* screenshot manager.",
+	"authors": [
+		"Hooverdawg"
+	],
+	"contact": {
+		"homepage": "https://hooverdawg.nekoweb.org/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/lightbox/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"net.hooverdawg.lightbox.Lightbox"
+		],
+		"client": [
+			"net.hooverdawg.lightbox.LightboxClient"
+		],
+		"fabric-datagen": [
+			"net.hooverdawg.lightbox.LightboxDataGenerator"
+		]
+	},
+	"mixins": [
+		"lightbox.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.20.1",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}
