@@ -11,22 +11,23 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.util.function.Consumer;
 
 public class RenameScreen extends Screen {
     private static final String BAD_CHARS = "[\\\\/:*?\"<>|]";
 
-    private final ViewerScreen viewer; //where cancel returns to
-    private final Screen gallery; //new viewer needs as its parent
+    private final Screen back; //new viewer needs as its parent
+    private final Consumer<Path> onDone;
     private final Path file;
     private EditBox box;
     private Button ok;
     private Component error = Component.empty();
 
-    public RenameScreen(ViewerScreen viewer, Screen gallery, Path file) {
+    public RenameScreen(Screen back, Path file, Consumer<Path> onDone) {
         super(Component.translatable("lightbox.rename.title"));
-        this.viewer = viewer;
-        this.gallery = gallery;
+        this.back = back;
         this.file = file;
+        this.onDone = onDone;
     }
 
     private String baseName() {
@@ -96,7 +97,7 @@ public class RenameScreen extends Screen {
         }
         MetaStore.rename(old, neu);
         Favourites.rename(old, neu);
-        minecraft.gui.setScreen(new ViewerScreen(gallery, target)); // reopens with new name
+        onDone.accept(target); // reopens with new name
     }
 
     @Override
@@ -111,6 +112,6 @@ public class RenameScreen extends Screen {
 
     @Override
     public void onClose() {
-        minecraft.gui.setScreen(viewer);
+        minecraft.gui.setScreen(back);
     }
 }

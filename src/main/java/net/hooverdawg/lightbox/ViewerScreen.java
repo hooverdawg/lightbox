@@ -5,7 +5,6 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.SpriteIconButton;
 import net.minecraft.client.gui.components.Tooltip;
-import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -75,8 +74,8 @@ public class ViewerScreen extends Screen {
 
             Button.OnPress press = _ -> {};
             if (favBtn) press = _ -> toggleFav();
-            if (delBtn) press = _ -> askDelete();
-            if (renBtn) press = _ -> minecraft.gui.setScreen(new RenameScreen(this, parent, file));
+            if (delBtn) press = _ -> Actions.askDelete(minecraft, file, this, parent);
+            if (renBtn) press = _ -> Actions.rename(minecraft, this, file, t -> minecraft.gui.setScreen(new ViewerScreen(parent, t)));
 
             Button b = SpriteIconButton.builder(tip, press, true)
                     .width(20)
@@ -139,25 +138,6 @@ public class ViewerScreen extends Screen {
     private void toggleFav() {
         Favourites.toggle(file.getFileName().toString());
         rebuildWidgets(); // re-runs init() so tooltip updates. image isn't reloaded
-    }
-
-    private void askDelete() {
-        String name = file.getFileName().toString();
-        minecraft.gui.setScreen(new ConfirmScreen(confirmed -> {
-            if (confirmed) {
-                try {
-                    Files.deleteIfExists(file);
-                    MetaStore.remove(name);
-                } catch (IOException e) {
-                    // couldn't delete, just return
-                }
-                minecraft.gui.setScreen(parent); // reload list
-            } else {
-                minecraft.gui.setScreen(this);
-            }
-        },
-        Component.translatable("lightbox.confirm.delete.title"),
-        Component.translatable("lightbox.confirm.delete.message", name)));
     }
 
     @Override

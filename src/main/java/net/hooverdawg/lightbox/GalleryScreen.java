@@ -33,6 +33,11 @@ public class GalleryScreen extends Screen {
     private List<Path> files = List.of();
     private int scroll = 0;
 
+    private record Entry(Component label, boolean enabled, Runnable action) {}
+    private static final int MENU_W = 140, ROW_H = 14;
+    private List<Entry> menu = List.of(); // empty = closed
+    private int menuX, menuY;
+
     public GalleryScreen(Screen parent) {
         super(Component.translatable("lightbox.screen.gallery"));
         this.parent = parent;
@@ -41,6 +46,7 @@ public class GalleryScreen extends Screen {
     @Override
     protected void init() {
         loadFiles();
+        scroll = Mth.clamp(scroll, 0, maxScroll());
         addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, _ -> onClose())
                 .bounds(width / 2 - 100, height - 28, 200, 20)
                 .build());
@@ -65,6 +71,46 @@ public class GalleryScreen extends Screen {
 
     private int cols() {
         return Math.max(1, (width - GAP) / (CELLW + GAP));
+    }
+
+    private int maxScroll() {
+        int rows = (files.size() + cols() - 1) / cols();
+        return Math.max(0, rows * (CELLH + GAP) + GAP - (height - TOP - BTM));
+    }
+
+    private int indexAt(double mx,  double my) {
+        if (my <= TOP || my >= height - BTM) return -1;
+        for (int i = 0; i < files.size(); i++) {
+            int x = cellX(i),  y = cellY(i);
+            if (mx >= x && mx < x + CELLW && my >= y && my < y + CELLH) return i;
+        }
+        return -1;
+    }
+
+    private int menuRowAt(double mx, double my) {
+        int h = menu.size() * ROW_H + 4;
+        if (mx < menuX || mx >= menuX + MENU_W || my < menuY + 2 || my >= menuY + h - 2) return -1;
+        return (int) ((my - menuY - 2) / ROW_H);
+    }
+
+    private void openMenu(int index, int mx, int my) {
+        Path f = files.get(index);
+        String name =  f.getFileName().toString();
+        boolean fav = Favourites.isFav(name);
+
+        menu = List.of(
+                new Entry(Component.translatable(fav ? "lightbox.button.unfavourite" : "lightbox.button.favourite"),
+                        true, () -> Favourites.toggle(name)),
+                new Entry(Component.translatable("lightbox.button.rename"), true,
+                        () -> Actions.rename(minecraft, this, f, _ -> minecraft.gui.setScreen(this))),
+                new Entry(Component.translatable("lightbox.button.edit"), false, () -> {}), // not implemented
+                new Entry(Component.translatable(fav ? "lightbox.button.delete.locked" : "lightbox.button.delete"),
+                        !fav, () -> Actions.askDelete(minecraft, f, this, this))
+        );
+
+        int h = menu.size() * ROW_H + 4;
+        menuX = Math.min(mx, width - MENU_W - 2); // keep on screen
+        menuY = Math.min(my, height - h - 2);
     }
 
     @Override
@@ -94,28 +140,52 @@ public class GalleryScreen extends Screen {
             }
         }
         graphics.disableScissor();
+
+        if (!menu.isEmpty()) {
+            int h = menu.size() * ROW_H + 4;
+            graphics.fill(menuX, menuY, menuX + MENU_W, menuY + h, 0xF0101010);
+            graphics.outline(menuX, menuY, MENU_W, h, 0xFF888888);
+
+            int hover = menuRowAt(mouseX, mouseY);
+            for (int r = 0; r < menu.size(); r++) {
+                Entry e = menu.get(r);
+                int ry = menuY + 2 + r * ROW_H;
+                if (r == hover && e.enabled()) {
+                    graphics.fill(menuX + 2, ry, menuX + MENU_W - 2, ry + ROW_H, 0xFF404040);
+                }
+                graphics.text(font, e.label(), menuX + 6, ry + 3, e.enabled() ? 0xFFFFFFFF : 0xFF777777, false);
+            }
+        }
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        int rows = (files.size() + cols() - 1) / cols();
-        int contentH = rows * (CELLH + GAP) + GAP;
-        int maxScroll = Math.max(0, contentH - (height - TOP - BTM));
-        scroll = Mth.clamp(scroll - (int) (scrollY * 20), 0, maxScroll);
+        menu = List.of();
+        scroll = Mth.clamp(scroll - (int) (scrollY * 20), 0, maxScroll());
         return true;
     }
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        if (super.mouseClicked(event, doubleClick)) return true; // let done button go first
-        if (event.button() == 0 && event.y() > TOP && event.y() < height - BTM) {
-            for (int i = 0; i < files.size(); i++) {
-                int x = cellX(i), y = cellY(i);
-                if (event.x() >= x && event.x() < x + CELLW && event.y() >= y && event.y() < y + CELLH ) {
-                    minecraft.gui.setScreen(new ViewerScreen(this, files.get(i)));
-                    return true;
-                }
-            }
+        if (!menu.isEmpty()) { // open menu absorbs click
+            int row = menuRowAt(event.x(), event.y());
+            List<Entry> m = menu;
+            menu = List.of();
+            if (row >= 0 && event.button() == 0 && m.get(row).enabled()) m.get(row).action().run();
+            return true;
+        }
+
+        if (super.mouseClicked(event, doubleClick)) return true;
+
+        int i = indexAt(event.x(), event.y());
+        if (i < 0) return false;
+        if (event.button() == 0) {
+            minecraft.gui.setScreen(new ViewerScreen(this, files.get(i)));
+            return true;
+        }
+        if (event.button() == 1) {
+            openMenu(i, (int) event.x(), (int) event.y());
+            return true;
         }
         return false;
     }
@@ -148,6 +218,7 @@ public class GalleryScreen extends Screen {
 
     @Override
     public void onClose() {
+        if (!menu.isEmpty()) { menu = List.of(); return; }
         minecraft.gui.setScreen(parent);
     }
 
