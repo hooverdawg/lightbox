@@ -4,10 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Stream;
 
 import com.mojang.blaze3d.platform.NativeImage;
@@ -23,20 +20,22 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 
-
 public class GalleryScreen extends Screen {
-    private static final int CELLW = 96, CELLH = 54, GAP = 8, TOP = 30, BTM = 36;
-    private int cellX(int i) { return left() + (i % cols()) * (CELLW + GAP); }
-    private int cellY(int i) { return TOP + GAP + (i / cols()) * (CELLH + GAP) - scroll; }
+    private static final int CELL_W = 96, CELL_H = 54, GAP = 8, TOP = 30, BTM = 36, MENU_W = 140, ROW_H = 14;
+    private int cellX(int i) { return left() + (i % cols()) * (CELL_W + GAP); }
+    private int cellY(int i) { return TOP + GAP + (i / cols()) * (CELL_H + GAP) - scroll; }
 
     private final Screen parent;
     private List<Path> files = List.of();
     private int scroll = 0;
 
     private record Entry(Component label, boolean enabled, Runnable action) {}
-    private static final int MENU_W = 140, ROW_H = 14;
     private List<Entry> menu = List.of(); // empty = closed
     private int menuX, menuY;
+
+    private boolean selectMode = false;
+    private final Set<String> selected = new HashSet<>();
+    private Button selectBtn, deleteBtn, doneBtn;
 
     public GalleryScreen(Screen parent) {
         super(Component.translatable("lightbox.screen.gallery"));
@@ -47,9 +46,18 @@ public class GalleryScreen extends Screen {
     protected void init() {
         loadFiles();
         scroll = Mth.clamp(scroll, 0, maxScroll());
-        addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, _ -> onClose())
-                .bounds(width / 2 - 100, height - 28, 200, 20)
-                .build());
+
+        doneBtn = Button.builder(CommonComponents.GUI_DONE, _ -> onClose())
+                .bounds(width / 2 - 65, height - 28, 130, 20).build();
+        addRenderableWidget(doneBtn);
+
+        selectBtn = Button.builder(Component.translatable("lightbox.button.select"), _ -> toggleSelectMode())
+                .bounds(width - 90, 6, 80, 20).build();
+        addRenderableWidget(selectBtn);
+
+        deleteBtn = Button.builder(Component.empty(), _ -> askDeleteSelected())
+                .bounds(width / 2 + 6, height - 28, 130, 20).build();
+        addRenderableWidget(deleteBtn);
     }
 
     private void loadFiles() {
@@ -65,24 +73,24 @@ public class GalleryScreen extends Screen {
 
     private int left() {
         int cols = cols();
-        int grid_W = cols * CELLW + (cols - 1) * GAP;
+        int grid_W = cols * CELL_W + (cols - 1) * GAP;
         return (width - grid_W) / 2;
     }
 
     private int cols() {
-        return Math.max(1, (width - GAP) / (CELLW + GAP));
+        return Math.max(1, (width - GAP) / (CELL_W + GAP));
     }
 
     private int maxScroll() {
         int rows = (files.size() + cols() - 1) / cols();
-        return Math.max(0, rows * (CELLH + GAP) + GAP - (height - TOP - BTM));
+        return Math.max(0, rows * (CELL_H + GAP) + GAP - (height - TOP - BTM));
     }
 
     private int indexAt(double mx,  double my) {
         if (my <= TOP || my >= height - BTM) return -1;
         for (int i = 0; i < files.size(); i++) {
             int x = cellX(i),  y = cellY(i);
-            if (mx >= x && mx < x + CELLW && my >= y && my < y + CELLH) return i;
+            if (mx >= x && mx < x + CELL_W && my >= y && my < y + CELL_H) return i;
         }
         return -1;
     }
@@ -115,8 +123,14 @@ public class GalleryScreen extends Screen {
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
+        selectBtn.setMessage(Component.translatable(selectMode ? "lightbox.button.select.stop" : "lightbox.button.select"));
+        deleteBtn.visible = selectMode;
+        deleteBtn.active = !selected.isEmpty();
+        deleteBtn.setMessage(Component.translatable("lightbox.button.delete.selected", selected.size()));
+        doneBtn.setX(selectMode ? width / 2 - 132 : width / 2 - 65);
+
         super.extractRenderState(graphics, mouseX, mouseY, delta);
-        graphics.text(font, title, 10, 10, 0xFFFFFFFF, true);
+        graphics.text(font, title, (width - font.width(title)) / 2, 12, 0xFFFFFFFF, true);
 
         int left = left();
         int cols = cols();
@@ -124,17 +138,29 @@ public class GalleryScreen extends Screen {
         for (int i = 0; i < files.size(); i++) {
             int x = cellX(i);
             int y = cellY(i);
-            if (y + CELLH < TOP || y > height - BTM) continue; // only load visible
+            if (y + CELL_H < TOP || y > height - BTM) continue; // only load visible
 
             Tex t = getTex(files.get(i));
             if (t.id() != null) {
                 graphics.blit(RenderPipelines.GUI_TEXTURED, t.id(), x, y, 0, 0,
-                        CELLW, CELLH, t.w(), t.h(), t.w(), t.h());
+                        CELL_W, CELL_H, t.w(), t.h(), t.w(), t.h());
             }
-            graphics.outline(x, y, CELLW, CELLH, 0xFF404040);
+            graphics.outline(x, y, CELL_W, CELL_H, 0xFF000000);
+
+            if (selectMode) {
+                String fname = files.get(i).getFileName().toString();
+                if (Favourites.isFav(fname)) {
+                    graphics.fill(x, y, x + CELL_W, y + CELL_H, 0x90000000); //dimmed
+                } else {
+                    boolean on = selected.contains(fname);
+                    if (on) graphics.fill(x, y, x + CELL_W, y + CELL_H, 0x604080FF);
+                    graphics.outline(x + 3, y + 3, 10, 10, 0xFFFFFFFF);
+                    if (on) graphics.fill(x +5, y + 5, x + 11, y + 11, 0xFF55FF55);
+                }
+            }
 
             if (Favourites.isFav(files.get(i).getFileName().toString())) {
-                int sx = x + CELLW - 18, sy = y + 2;
+                int sx = x + CELL_W - 18, sy = y + 2;
                 graphics.fill(sx - 1, sy - 1, sx + 17, sy + 17, 0x80000000); // dark backing - visibility
                 graphics.blit(RenderPipelines.GUI_TEXTURED, Favourites.STAR, sx, sy, 0, 0, 16, 16, 16, 16);
             }
@@ -179,6 +205,13 @@ public class GalleryScreen extends Screen {
 
         int i = indexAt(event.x(), event.y());
         if (i < 0) return false;
+        if (selectMode) {
+            if (event.button() == 0) {
+                String fname = files.get(i).getFileName().toString();
+                if (!Favourites.isFav(fname) && !selected.remove(fname)) selected.add(fname);
+            }
+            return true; // no viewer - no right click menu (when select)
+        }
         if (event.button() == 0) {
             minecraft.gui.setScreen(new ViewerScreen(this, files.get(i)));
             return true;
@@ -188,6 +221,23 @@ public class GalleryScreen extends Screen {
             return true;
         }
         return false;
+    }
+
+    private void toggleSelectMode() {
+        selectMode = !selectMode;
+        selected.clear();
+        menu = List.of();
+        rebuildWidgets(); // re-runs init() so tooltip updates. image isn't reloaded
+    }
+
+    private void askDeleteSelected() {
+        List<Path> picked = files.stream()
+                .filter(f -> selected.contains(f.getFileName().toString()))
+                .toList();
+        Actions.askDeleteMany(minecraft, picked, this, () -> {
+            selected.clear();
+            selectMode = false;
+        });
     }
 
     private record Tex(Identifier id, int w, int h) {}
@@ -219,6 +269,7 @@ public class GalleryScreen extends Screen {
     @Override
     public void onClose() {
         if (!menu.isEmpty()) { menu = List.of(); return; }
+        if (selectMode) { toggleSelectMode(); return; }
         minecraft.gui.setScreen(parent);
     }
 

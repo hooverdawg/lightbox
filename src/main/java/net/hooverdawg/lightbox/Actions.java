@@ -8,32 +8,52 @@ import net.minecraft.network.chat.Component;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.function.Consumer;
 
 public final class Actions {
     private Actions() {}
 
-    // confirm, then delete. cancelTo - where cancel goes, afterDel - where land afterwards
-    public static void askDelete(Minecraft mc, Path file, Screen cancelTo, Screen afterDelete) {
-        String name = file.getFileName().toString();
-        mc.gui.setScreen(new ConfirmScreen(confirmed -> {
-            if (confirmed) {
-                try {
-                    Files.deleteIfExists(file);
-                    MetaStore.remove(name);
-                } catch (IOException e) {
-                    // couldn't delete, just return
-                }
-                mc.gui.setScreen(afterDelete); // reload list
-            } else {
-                mc.gui.setScreen(cancelTo);
-            }
-        },
-                Component.translatable("lightbox.confirm.delete.title"),
-                Component.translatable("lightbox.confirm.delete.message", name)));
+    private static void deleteQuietly(Path f) {
+        try {
+            Files.deleteIfExists(f);
+            MetaStore.remove(f.getFileName().toString());
+        } catch (IOException e) {
+            // skip, keep going
+        }
     }
 
-    // opens rename screen. back - where cancel goes, onDone - new path
+    // confirm, delete many. favourites are skipped
+    public static void askDeleteMany(Minecraft mc, List<Path> files, Screen returnTo, Runnable afterDelete) {
+        List<Path> targets = files.stream()
+                .filter(f -> !Favourites.isFav(f.getFileName().toString()))
+                .toList();
+        if (targets.isEmpty()) return;
+
+        mc.gui.setScreen(new ConfirmScreen(confirmed -> {
+            if (confirmed) {
+                targets.forEach(Actions::deleteQuietly);
+                afterDelete.run();
+            }
+            mc.gui.setScreen(returnTo);
+        }, Component.translatable("lightbox.confirm.delete.many.title", targets.size()),
+                Component.translatable("lightbox.confirm.delete.many.message")));
+    }
+
+    // confirm, then delete. favourites are skipped
+    public static void askDelete(Minecraft mc, Path file, Screen cancelTo, Screen afterDelete) {
+        String name = file.getFileName().toString();
+        if (Favourites.isFav(name)) return;
+
+        mc.gui.setScreen(new ConfirmScreen(confirmed -> {
+            if (confirmed) deleteQuietly(file);
+            mc.gui.setScreen(confirmed ? afterDelete : cancelTo);
+        },
+            Component.translatable("lightbox.confirm.delete.title"),
+            Component.translatable("lightbox.confirm.delete.message", name)));
+    }
+
+    // opens rename screen
     public static void rename(Minecraft mc, Screen back, Path file, Consumer<Path> onDone) {
         mc.gui.setScreen(new RenameScreen(back, file, onDone));
     }
