@@ -5,6 +5,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.SpriteIconButton;
 import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -17,7 +18,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public class ViewerScreen extends Screen {
-    private static final int TOP = 36, BTM = 40;
+    private static final int TOP = 46, BTM = 66;
+    private final java.util.List<Component> info = new java.util.ArrayList<>();
 
     private final Screen parent;
     private final Path file;
@@ -28,6 +30,25 @@ public class ViewerScreen extends Screen {
         super(Component.translatable("lightbox.screen.viewer"));
         this.parent = parent;
         this.file = file;
+
+        // build info lines
+        ScreenshotMeta meta = MetaStore.get(file.getFileName().toString());
+        long ms;
+        try { ms = meta != null ? meta.time() : Files.getLastModifiedTime(file).toMillis(); }
+        catch (IOException e) {ms = 0;}
+        String when = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                .withZone(java.time.ZoneId.systemDefault())
+                .format(java.time.Instant.ofEpochMilli(ms));
+
+        if (meta != null) {
+            info.add(Component.translatable("lightbox.viewer.taken", when, meta.world()));
+            info.add(Component.translatable("lightbox.viewer.coords",
+                    String.format("%.1f", meta.x()), String.format("%.1f", meta.y()), String.format("%.1f", meta.z()),
+                    String.format("%.1f", meta.yaw()), String.format("%.1f", meta.pitch())));
+        } else {
+            info.add(Component.literal(when));
+            info.add(Component.translatable("lightbox.viewer.nodata"));
+        }
     }
 
     @Override
@@ -38,17 +59,32 @@ public class ViewerScreen extends Screen {
 
         // actions along bottom (unwired)
         String[] icons = {"rename", "favourite", "edit", "delete"};
+        boolean isFav = Favourites.isFav(file.getFileName().toString());
         int gap = 4;
         int startX = (width - (icons.length * 20 + (icons.length - 1) * gap)) / 2;
         for (int i = 0; i < icons.length; i++) {
-            Component tip = Component.translatable("lightbox.button." + icons[i]);
-            Button b = SpriteIconButton.builder(tip, _ -> {}, true)
+            boolean favBtn = icons[i].equals("favourite");
+            boolean delBtn = icons[i].equals("delete");
+            boolean renBtn = icons[i].equals("rename");
+
+            Component tip = Component.translatable(
+                favBtn && isFav ? "lightbox.button.unfavourite"
+                : delBtn && isFav ? "lightbox.button.delete.locked"
+                : "lightbox.button." + icons[i]
+            );
+
+            Button.OnPress press = _ -> {};
+            if (favBtn) press = _ -> toggleFav();
+            if (delBtn) press = _ -> askDelete();
+            if (renBtn) press = _ -> minecraft.gui.setScreen(new RenameScreen(this, parent, file));
+
+            Button b = SpriteIconButton.builder(tip, press, true)
                     .width(20)
                     .sprite(Identifier.fromNamespaceAndPath("lightbox", "icon/" + icons[i]), 16, 16)
                     .build();
             b.setPosition(startX + i * (20 + gap), height - 28);
             b.setTooltip(Tooltip.create(tip));
-            b.active = false; // until wired up
+            b.active = favBtn || renBtn || (delBtn && !isFav); // delete greyed out for favourites
             addRenderableWidget(b);
         }
 
@@ -71,6 +107,14 @@ public class ViewerScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
         super.extractRenderState(graphics, mouseX, mouseY, delta);
+
+        String name = file.getFileName().toString();
+        graphics.text(font, name, (width - font.width(name)) / 2, 32, 0xFFFFFFFF, true);
+        if (Favourites.isFav(name)) {
+            int sx = (width + font.width(name)) / 2 + 4;
+            graphics.blit(RenderPipelines.GUI_TEXTURED, Favourites.STAR, sx, 28, 0, 0, 16, 16, 16, 16);
+        }
+
         if (texId == null) return;
 
         int availW = width - 20, availH = height - TOP - BTM;
@@ -80,12 +124,48 @@ public class ViewerScreen extends Screen {
 
         graphics.blit(RenderPipelines.GUI_TEXTURED, texId, x, y, 0, 0, w, h, imgW, imgH, imgW, imgH);
         graphics.outline(x - 1, y - 1, w + 2, h + 2, 0xFFFFFFFF);
-        //will draw timestamp etc here
+
+        // translucent strip behind info for readability
+        int stripTop = height - BTM + 2;
+        graphics.fill(0, stripTop, width, stripTop + info.size() * 12 + 4, 0x90000000);
+
+        int ty = height - BTM + 6;
+        for (Component line : info) {
+            graphics.text(font, line, (width - font.width(line)) / 2, ty, 0xFFFFFFFF, true);
+            ty += 12;
+        }
+    }
+
+    private void toggleFav() {
+        Favourites.toggle(file.getFileName().toString());
+        rebuildWidgets(); // re-runs init() so tooltip updates. image isn't reloaded
+    }
+
+    private void askDelete() {
+        String name = file.getFileName().toString();
+        minecraft.gui.setScreen(new ConfirmScreen(confirmed -> {
+            if (confirmed) {
+                try {
+                    Files.deleteIfExists(file);
+                    MetaStore.remove(name);
+                } catch (IOException e) {
+                    // couldn't delete, just return
+                }
+                minecraft.gui.setScreen(parent); // reload list
+            } else {
+                minecraft.gui.setScreen(this);
+            }
+        },
+        Component.translatable("lightbox.confirm.delete.title"),
+        Component.translatable("lightbox.confirm.delete.message", name)));
     }
 
     @Override
     public void removed() {
-        if (texId != null) minecraft.getTextureManager().release(texId);
+        if (texId != null) {
+            minecraft.getTextureManager().release(texId);
+            texId = null; // reloaded if return
+        }
     }
 
     @Override

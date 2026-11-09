@@ -3,7 +3,7 @@
 	"id": "lightbox",
 	"version": "${version}",
 	"name": "Lightbox",
-	"description": "The perfect* screenshot manager.",
+	"description": "A Minecraft mod that introduces a screenshot gallery, with capabilities for renaming, deleting, favouriting, and editing.",
 	"authors": [
 		"Hooverdawg"
 	],

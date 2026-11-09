@@ -70,7 +70,7 @@ public class GalleryScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
         super.extractRenderState(graphics, mouseX, mouseY, delta);
-        graphics.text(font, title, 10, 10, 0xFFFFFF, true);
+        graphics.text(font, title, 10, 10, 0xFFFFFFFF, true);
 
         int left = left();
         int cols = cols();
@@ -86,6 +86,12 @@ public class GalleryScreen extends Screen {
                         CELLW, CELLH, t.w(), t.h(), t.w(), t.h());
             }
             graphics.outline(x, y, CELLW, CELLH, 0xFF404040);
+
+            if (Favourites.isFav(files.get(i).getFileName().toString())) {
+                int sx = x + CELLW - 18, sy = y + 2;
+                graphics.fill(sx - 1, sy - 1, sx + 17, sy + 17, 0x80000000); // dark backing - visibility
+                graphics.blit(RenderPipelines.GUI_TEXTURED, Favourites.STAR, sx, sy, 0, 0, 16, 16, 16, 16);
+            }
         }
         graphics.disableScissor();
     }
