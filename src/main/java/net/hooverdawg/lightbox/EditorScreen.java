@@ -37,13 +37,14 @@ public class EditorScreen extends Screen {
 
     //every edit is one operation, or 'Op'
     private interface Op {}
+    private enum Tool { BRUSH, TEXT, RECT, ARROW, CROP }
+
     private record Stroke(int rgb, float size, List<double[]> pts) implements Op {}
-    private enum Tool { BRUSH, TEXT, RECT, ARROW }
     private record Rect(int rgb, float size, double x1, double y1, double x2, double y2) implements Op {}
     private record Arrow(int rgb, float size, double x1, double y1, double x2, double y2) implements Op {}
-
-    private record TextStyle(boolean bold, boolean italic, boolean underline, boolean strike) {}
+    private record Crop(int x, int y, int w, int h) implements Op {}
     private record Text(int rgb, float px, double x, double y, String text, TextStyle style) implements Op {}
+    private record TextStyle(boolean bold, boolean italic, boolean underline, boolean strike) {}
 
     private final Screen parent;
     private final Path file;
@@ -92,7 +93,7 @@ public class EditorScreen extends Screen {
         addIcon("text", 10, TOP + 24, true, () -> {tool = Tool.TEXT; setInitialFocus(textBox);});
         addIcon("rectangle", 10, TOP + 48, true, () -> tool = Tool.RECT);
         addIcon("arrow", 10, TOP + 72, true, () -> tool = Tool.ARROW);
-        addIcon("crop", 10, TOP + 96, false, () -> {});
+        addIcon("crop", 10, TOP + 96, true, () -> tool = Tool.CROP);
 
         int ay = TOP + 5 * 24 + 12;
         undoBtn = addIcon("undo", 10, ay, false, this::undo);
@@ -241,8 +242,21 @@ public class EditorScreen extends Screen {
         };
     }
 
+    private static double cl(double v, double lo, double hi) {
+        return Math.max(lo, Math.min(hi, v));
+    }
+
+    private void cropTo(double[] a, double[] b) {
+        int x1 = (int) Math.round(cl(Math.min(a[0], b[0]), 0, imgW));
+        int x2 = (int) Math.round(cl(Math.max(a[0], b[0]), 0, imgW));
+        int y1 = (int) Math.round(cl(Math.min(a[1], b[1]), 0, imgH));
+        int y2 = (int) Math.round(cl(Math.max(a[1], b[1]), 0, imgH));
+        if (x2 - x1 < 4 || y2 - y1 < 4) return; // too small
+        commit(new Crop(x1, y1, x2 - x1, y2 - y1));
+    }
+
     private float textPx() {
-        return (float) (12 + brush * 3); // slider 1-60 gives 15-192 px
+        return (float) (12 + brush * 3); // gives 15-192 px
     }
 
     private Button styleBtn(String letter, ChatFormatting fmt, String key, int slot, Runnable toggle) {
@@ -283,6 +297,14 @@ public class EditorScreen extends Screen {
     }
 
     private BufferedImage applyOp(BufferedImage img, Op op) {
+        if (op instanceof Crop c) {
+            int x = Math.max(0, Math.min(c.x(), img.getWidth() - 1));
+            int y = Math.max(0, Math.min(c.y(), img.getHeight() - 1));
+            int w = Math.max(1, Math.min(c.w(), img.getWidth() - x));
+            int h = Math.max(1, Math.min(c.h(), img.getHeight() - y));
+            return copy(img.getSubimage(x, y, w, h));
+        }
+
         Graphics2D g = img.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
@@ -413,7 +435,11 @@ public class EditorScreen extends Screen {
             double ix = toImgX(mx), iy = toImgY(my);
             if (tool == Tool.TEXT) {
                 String s = textBox.getValue();
-                if (!s.isBlank()) commit(new Text(rgb(), textPx(), ix, iy, s, new TextStyle(bold, italic, underline, strike)));
+                if (!s.isBlank()) {
+                    TextStyle st = new TextStyle(bold, italic, underline, strike);
+                    int[] sz = textSize(s, makeFont(textPx(), st));
+                    commit(new Text(rgb(), textPx(), ix - sz[0] / 2.0, iy - sz[1] / 2.0, s, st));
+                }
             } else if (tool == Tool.BRUSH) {
                 drawing = new ArrayList<>();
                 drawing.add(new double[] {ix, iy});
@@ -463,9 +489,13 @@ public class EditorScreen extends Screen {
             shapeA = null;
             shapeB = null;
             if (Math.hypot(b[0] - a[0], b[1] - a[1]) * scale >= 3) { // ignore tiny drags
-                commit(tool == Tool.RECT
-                    ? new Rect(rgb(), (float) brush, a[0], a[1], b[0], b[1])
-                    : new Arrow(rgb(), (float) brush, a[0], a[1], b[0], b[1]));
+                if (tool == Tool.CROP) {
+                    cropTo(a,b);
+                } else {
+                    commit(tool == Tool.RECT
+                        ? new Rect(rgb(), (float) brush, a[0], a[1], b[0], b[1])
+                        : new Arrow(rgb(), (float) brush, a[0], a[1], b[0], b[1]));
+                }
             }
             return true;
         }
@@ -491,7 +521,7 @@ public class EditorScreen extends Screen {
 
         super.extractRenderState(graphics, mouseX, mouseY, delta);
 
-        int hy = switch (tool) { case BRUSH -> TOP; case TEXT -> TOP + 24; case RECT -> TOP + 48; case ARROW -> TOP + 72; };
+        int hy = switch (tool) { case BRUSH -> TOP; case TEXT -> TOP + 24; case RECT -> TOP + 48; case ARROW -> TOP + 72; case CROP -> TOP + 96; };
         graphics.outline(8, hy - 2, 24, 24, 0xFFFFFF55);
 
         if (texId == null) {
@@ -532,7 +562,7 @@ public class EditorScreen extends Screen {
             }
             graphics.disableScissor();
         }
-        if (shapeA != null) { // shape tools - rect and arrow
+        if (shapeA != null && tool != Tool.CROP) { // shape tools - rect, arrow
             graphics.enableScissor(ox, oy, ox + dw, oy + dh);
             int argb = 0xFF000000 | rgb();
             int d = Math.max(1, Math.round((float) brush * scale));
@@ -551,6 +581,22 @@ public class EditorScreen extends Screen {
             }
             graphics.disableScissor();
         }
+        if (shapeA != null && tool == Tool.CROP) {
+            double lx = cl(Math.min(shapeA[0], shapeB[0]), 0, imgW), rx = cl(Math.max(shapeA[0], shapeB[0]), 0, imgW);
+            double top = cl(Math.min(shapeA[1], shapeB[1]), 0, imgH), btm = cl(Math.max(shapeA[1], shapeB[1]), 0, imgH);
+            int sx1 = ox + (int) Math.round(lx * scale), sx2 = ox + (int) Math.round(rx * scale);
+            int sy1 = oy + (int) Math.round(top * scale), sy2 = oy + (int) Math.round(btm * scale);
+
+            int dim = 0xA0000000;
+            graphics.fill(ox, oy, ox + dw, sy1, dim);
+            graphics.fill(ox, sy2, ox + dw, oy + dh, dim);
+            graphics.fill(ox, sy1, sx1, sy2, dim);
+            graphics.fill(sx2, sy1, ox + dw, sy2, dim);
+            graphics.outline(sx1, sy1, sx2 - sx1, sy2 - sy1, 0xFFFFFFFF);
+
+            String size = Math.round(rx - lx) + " × " + Math.round(btm - top);
+            graphics.text(font, size, sx1 + 4, sy1 + 4, 0xFFFFFFFF, true);
+        }
         if (tool == Tool.TEXT) { // text tool
             outLineIf(graphics, boldBtn, bold);
             outLineIf(graphics, italicBtn, italic);
@@ -561,7 +607,8 @@ public class EditorScreen extends Screen {
             if (!s.isBlank() && insideImage(mouseX, mouseY) && !(paletteOpen && inPanel(mouseX,mouseY))) {
                 int[] sz = textSize(s, makeFont(textPx(), new TextStyle(bold, italic, underline, strike)));
                 graphics.enableScissor(ox, oy, ox + dw, oy + dh);
-                graphics.outline(mouseX, mouseY, Math.round(sz[0] * scale), Math.round(sz[1] * scale), 0xFF000000 | rgb());
+                int bw = Math.round(sz[0] * scale), bh = Math.round(sz[1] * scale);
+                graphics.outline(mouseX - bw / 2, mouseY - bh / 2, bw, bh, 0xFF000000 | rgb());
                 graphics.disableScissor();
             }
         }

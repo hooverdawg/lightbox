@@ -51,8 +51,8 @@ public class GalleryScreen extends Screen {
                 .bounds(width / 2 - 65, height - 28, 130, 20).build();
         addRenderableWidget(doneBtn);
 
-        selectBtn = Button.builder(Component.translatable("lightbox.button.select"), _ -> toggleSelectMode())
-                .bounds(width - 90, 6, 80, 20).build();
+        selectBtn = Button.builder(Component.translatable("lightbox.button.bulk"), _ -> toggleSelectMode())
+                .bounds(width - 80, 6, 70, 20).build();
         addRenderableWidget(selectBtn);
 
         deleteBtn = Button.builder(Component.empty(), _ -> askDeleteSelected())
@@ -124,7 +124,7 @@ public class GalleryScreen extends Screen {
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
-        selectBtn.setMessage(Component.translatable(selectMode ? "lightbox.button.select.stop" : "lightbox.button.select"));
+        selectBtn.setMessage(Component.translatable(selectMode ? "lightbox.button.select.stop" : "lightbox.button.bulk"));
         deleteBtn.visible = selectMode;
         deleteBtn.active = !selected.isEmpty();
         deleteBtn.setMessage(Component.translatable("lightbox.button.delete.selected", selected.size()));
