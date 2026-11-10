@@ -28,11 +28,14 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+
+import org.lwjgl.glfw.GLFW;
 
 public class EditorScreen extends Screen {
     private static final int SIDE = 40, TOP = 36, BTM = 70;
@@ -412,6 +415,20 @@ public class EditorScreen extends Screen {
 
     private boolean insideImage(double mx, double my) {
         return mx >= ox && mx < ox + dw && my >= oy && my < oy + dh;
+    }
+
+    @Override
+    public boolean keyPressed(KeyEvent event) {
+        if (event.hasControlDown()) {
+            int k = event.key();
+            if (k == GLFW.GLFW_KEY_Z) {
+                if (event.hasShiftDown()) redo(); else undo();
+                return true;
+            }
+            if (k == GLFW.GLFW_KEY_Y) { redo(); return true; }
+            if (k == GLFW.GLFW_KEY_S) { openSave(); return true; }
+        }
+        return super.keyPressed(event);
     }
 
     @Override

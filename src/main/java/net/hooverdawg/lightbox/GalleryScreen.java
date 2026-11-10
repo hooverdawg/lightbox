@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Stream;
 
+import com.mojang.blaze3d.platform.cursor.CursorTypes;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -196,6 +197,15 @@ public class GalleryScreen extends Screen {
                     graphics.fill(menuX + 2, ry, menuX + MENU_W - 2, ry + ROW_H, 0xFF404040);
                 }
                 graphics.text(font, e.label(), menuX + 6, ry + 3, e.enabled() ? 0xFFFFFFFF : 0xFF777777, false);
+            }
+        }
+        if (!menu.isEmpty()) {
+            int r = menuRowAt(mouseX, mouseY);
+            if (r >= 0 && menu.get(r).enabled()) graphics.requestCursor(CursorTypes.POINTING_HAND);
+        } else {
+            int hov = indexAt(mouseX, mouseY);
+            if (hov >= 0 && !(selectMode && Favourites.isFav(files.get(hov).getFileName().toString()))) {
+                graphics.requestCursor(CursorTypes.POINTING_HAND);
             }
         }
     }

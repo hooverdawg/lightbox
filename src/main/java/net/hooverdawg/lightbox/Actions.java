@@ -11,7 +11,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.Util;
 
-import javax.tools.Tool;
 import java.awt.*;
 import java.io.IOException;
 import java.nio.file.Files;
