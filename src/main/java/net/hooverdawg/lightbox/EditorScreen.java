@@ -2,6 +2,7 @@ package net.hooverdawg.lightbox;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
+import java.awt.font.TextAttribute;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Line2D;
 import java.awt.geom.Path2D;
@@ -12,12 +13,16 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.DoubleConsumer;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.*;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -36,7 +41,9 @@ public class EditorScreen extends Screen {
     private enum Tool { BRUSH, TEXT, RECT, ARROW }
     private record Rect(int rgb, float size, double x1, double y1, double x2, double y2) implements Op {}
     private record Arrow(int rgb, float size, double x1, double y1, double x2, double y2) implements Op {}
-    private record Text(int rgb, float px, double x, double y, String text) implements Op {}
+
+    private record TextStyle(boolean bold, boolean italic, boolean underline, boolean strike) {}
+    private record Text(int rgb, float px, double x, double y, String text, TextStyle style) implements Op {}
 
     private final Screen parent;
     private final Path file;
@@ -63,7 +70,11 @@ public class EditorScreen extends Screen {
     private boolean paletteOpen = false, pickingWheel = false, pickingBright = false;
 
     private Button undoBtn, redoBtn;
+
     private EditBox textBox;
+    private boolean bold = false, italic = false, underline = false, strike = false;
+    private Button boldBtn, italicBtn, underBtn, strikeBtn;
+    private final List<AbstractWidget> textWidgets = new ArrayList<>();
 
     public EditorScreen(Screen parent, Path file) {
         super(Component.translatable("lightbox.screen.editor"));
@@ -93,13 +104,22 @@ public class EditorScreen extends Screen {
                 "lightbox.editor.size", 1, 60, brush, v -> brush = v));
 
         // text box (when text button selected)
+        textWidgets.clear();
+
         String keep = textBox != null ? textBox.getValue() : "";
-        textBox = new EditBox(font, x0(), height - 56, 308, 20, Component.translatable("lightbox.editor.textbox"));
+        textBox = new EditBox(font, x0(), height - 56, 212, 20, Component.translatable("lightbox.editor.textbox"));
         textBox.setMaxLength(120);
+        textBox.setHint(Component.translatable("lightbox.editor.texthint"));
         textBox.setValue(keep);
         addRenderableWidget(textBox);
+        textWidgets.add(textBox);
 
-        //colour swatch
+        boldBtn = styleBtn("B", ChatFormatting.BOLD, "bold", 0, () -> bold = !bold);
+        italicBtn = styleBtn("I", ChatFormatting.ITALIC, "italic", 1, () -> italic = !italic);
+        underBtn = styleBtn("U", ChatFormatting.UNDERLINE, "underline", 2, () -> underline = !underline);
+        strikeBtn = styleBtn("S", ChatFormatting.STRIKETHROUGH, "strike", 3, () -> strike = !strike);
+
+        // colour swatch
         if (wheelId == null) buildWheel();
         if (base == null && !loadFailed) loadBase();
         if (texId == null && current != null) refreshTexture(current);
@@ -225,16 +245,40 @@ public class EditorScreen extends Screen {
         return (float) (12 + brush * 3); // slider 1-60 gives 15-192 px
     }
 
-    private static int[] textSize(String text, float px) {
+    private Button styleBtn(String letter, ChatFormatting fmt, String key, int slot, Runnable toggle) {
+        Button b = Button.builder(Component.literal(letter).withStyle(fmt), _ -> {
+            toggle.run();
+            setInitialFocus(textBox);
+        })
+            .bounds(x0() + 216 + slot * 24, height - 56, 20, 20).build();
+        b.setTooltip(Tooltip.create(Component.translatable("lightbox.editor." + key)));
+        addRenderableWidget(b);
+        textWidgets.add(b);
+        return b;
+    }
+
+    private static void outLineIf(GuiGraphicsExtractor g, Button b, boolean on) {
+        if (on) g.outline(b.getX() - 1, b.getY() - 1, b.getWidth() + 2, b.getHeight() + 2, 0xFFFFFF55);
+    }
+
+    private static Font makeFont(float px, TextStyle s) {
+        Font f = new Font(Font.SANS_SERIF, (s.bold() ? Font.BOLD : 0) | (s.italic() ? Font.ITALIC : 0), Math.round(px));
+        Map<TextAttribute, Object> a = new HashMap<>();
+        if (s.underline()) a.put(TextAttribute.UNDERLINE, TextAttribute.UNDERLINE_ON);
+        if (s.strike()) a.put(TextAttribute.STRIKETHROUGH, TextAttribute.STRIKETHROUGH_ON);
+        return a.isEmpty() ? f : f.deriveFont(a);
+    }
+
+    private static int[] textSize(String text, Font font) {
         try {
             Graphics2D g = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB).createGraphics();
-            g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, Math.round(px)));
+            g.setFont(font);
             FontMetrics fm = g.getFontMetrics();
             int[] size = {fm.stringWidth(text), fm.getHeight()};
             g.dispose();
             return size;
         } catch (Throwable t) {
-            return new int[] {(int) (text.length() * px * 0.6), (int) (px * 1.2)};
+            return new int[] {(int) (text.length() * font.getSize() * 0.6), (int) (font.getSize() * 1.2)};
         }
     }
 
@@ -280,18 +324,14 @@ public class EditorScreen extends Screen {
         } else if (op instanceof Text t) { // text tool
             try {
                 g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-                g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, Math.round(t.px())));
+                g.setFont(makeFont(t.px(), t.style()));
                 int baseline = (int) Math.round(t.y()) + g.getFontMetrics().getAscent();
-                int off = Math.max(1, Math.round(t.px() / 14f));
-                g.setColor(new Color(0, 0, 0, 150)); // added shadow for readability
-                g.drawString(t.text(), (float) t.x() + off, baseline + off);
                 g.setColor(new Color(t.rgb()));
                 g.drawString(t.text(), (float) t.x(), baseline);
             } catch (Throwable ignored) {
                 // if java can't load font, skip text instead of crashing
             }
         }
-
 
         g.dispose();
         return img;
@@ -373,7 +413,7 @@ public class EditorScreen extends Screen {
             double ix = toImgX(mx), iy = toImgY(my);
             if (tool == Tool.TEXT) {
                 String s = textBox.getValue();
-                if (!s.isBlank()) commit(new Text(rgb(), textPx(), ix, iy, s));
+                if (!s.isBlank()) commit(new Text(rgb(), textPx(), ix, iy, s, new TextStyle(bold, italic, underline, strike)));
             } else if (tool == Tool.BRUSH) {
                 drawing = new ArrayList<>();
                 drawing.add(new double[] {ix, iy});
@@ -442,8 +482,12 @@ public class EditorScreen extends Screen {
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
         undoBtn.active = !ops.isEmpty();
         redoBtn.active = !redoStack.isEmpty();
-        textBox.visible = tool == Tool.TEXT;
-        textBox.active = tool == Tool.TEXT;
+
+        boolean showText = tool == Tool.TEXT;
+        for (AbstractWidget w : textWidgets) {
+            w.visible = showText;
+            w.active = showText;
+        }
 
         super.extractRenderState(graphics, mouseX, mouseY, delta);
 
@@ -469,7 +513,7 @@ public class EditorScreen extends Screen {
         graphics.outline(ox - 1, oy - 1, dw + 2, dh + 2, 0xFFFFFFFF);
 
         //drawing preview
-        if (drawing != null) {
+        if (drawing != null) { // brush tool
             graphics.enableScissor(ox, oy, ox + dw, oy + dh);
             int argb = 0xFF000000 | rgb();
             int d = Math.max(1, Math.round((float) brush * scale));
@@ -488,17 +532,17 @@ public class EditorScreen extends Screen {
             }
             graphics.disableScissor();
         }
-        if (shapeA != null) {
+        if (shapeA != null) { // shape tools - rect and arrow
             graphics.enableScissor(ox, oy, ox + dw, oy + dh);
             int argb = 0xFF000000 | rgb();
             int d = Math.max(1, Math.round((float) brush * scale));
             double[] a = shapeA, b = shapeB;
-            if (tool == Tool.RECT) {
+            if (tool == Tool.RECT) { // if rect
                 stampLine(graphics, a[0], a[1], b[0], a[1], d, argb);
                 stampLine(graphics, b[0], a[1], b[0], b[1], d, argb);
                 stampLine(graphics, b[0], b[1], a[0], b[1], d, argb);
                 stampLine(graphics, a[0], b[1], a[0], a[1], d, argb);
-            } else {
+            } else { // if arrow
                 double[] geo = arrowGeo(a[0], a[1], b[0], b[1], brush);
                 stampLine(graphics, a[0], a[1], b[0], b[1], d, argb);
                 stampLine(graphics, b[0], b[1], geo[2], geo[3], d, argb);
@@ -507,17 +551,17 @@ public class EditorScreen extends Screen {
             }
             graphics.disableScissor();
         }
-        if (tool == Tool.TEXT) {
-            Component hint = Component.translatable("lightbox.editor.texthint");
-            graphics.text(font, hint, x0(), height - 68, 0xFFAAAAAA, true);
+        if (tool == Tool.TEXT) { // text tool
+            outLineIf(graphics, boldBtn, bold);
+            outLineIf(graphics, italicBtn, italic);
+            outLineIf(graphics, underBtn, underline);
+            outLineIf(graphics, strikeBtn, strike);
 
             String s = textBox.getValue();
             if (!s.isBlank() && insideImage(mouseX, mouseY) && !(paletteOpen && inPanel(mouseX,mouseY))) {
-                int[] sz = textSize(s, textPx());
+                int[] sz = textSize(s, makeFont(textPx(), new TextStyle(bold, italic, underline, strike)));
                 graphics.enableScissor(ox, oy, ox + dw, oy + dh);
-                int bx = mouseX, by = mouseY, bw = Math.round(sz[0] * scale), bh = Math.round(sz[1] * scale);
-                graphics.outline(bx - 1, by - 1, bw + 2, bh + 2, 0xFF000000);
-                graphics.outline(bx, by, bw, bh, 0xFF000000 | rgb());
+                graphics.outline(mouseX, mouseY, Math.round(sz[0] * scale), Math.round(sz[1] * scale), 0xFF000000 | rgb());
                 graphics.disableScissor();
             }
         }
