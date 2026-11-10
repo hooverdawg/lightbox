@@ -112,7 +112,7 @@ public class GalleryScreen extends Screen {
                 new Entry(Component.translatable("lightbox.button.rename"), true,
                         () -> Actions.rename(minecraft, this, f, _ -> minecraft.gui.setScreen(this))),
                 new Entry(Component.translatable("lightbox.button.edit"), true,
-                        () -> minecraft.gui.setScreen(new EditorScreen(this, f))),
+                        () -> minecraft.gui.setScreen(new EditorScreen(this, f, _ -> minecraft.gui.setScreen(this)))),
                 new Entry(Component.translatable(fav ? "lightbox.button.delete.locked" : "lightbox.button.delete"),
                         !fav, () -> Actions.askDelete(minecraft, f, this, this))
         );
@@ -124,7 +124,7 @@ public class GalleryScreen extends Screen {
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
-        selectBtn.setMessage(Component.translatable(selectMode ? "lightbox.button.select.stop" : "lightbox.button.bulk"));
+        selectBtn.setMessage(Component.translatable(selectMode ? "lightbox.button.bulk.stop" : "lightbox.button.bulk"));
         deleteBtn.visible = selectMode;
         deleteBtn.active = !selected.isEmpty();
         deleteBtn.setMessage(Component.translatable("lightbox.button.delete.selected", selected.size()));

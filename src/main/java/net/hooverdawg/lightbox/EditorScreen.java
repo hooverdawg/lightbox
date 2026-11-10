@@ -1,6 +1,7 @@
 package net.hooverdawg.lightbox;
 
 import javax.imageio.ImageIO;
+
 import java.awt.*;
 import java.awt.font.TextAttribute;
 import java.awt.geom.Ellipse2D;
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.DoubleConsumer;
 
 import com.mojang.blaze3d.platform.NativeImage;
@@ -24,6 +26,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.*;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.RenderPipelines;
@@ -62,25 +65,27 @@ public class EditorScreen extends Screen {
     private float scale;
     private int ox, oy, dw, dh;
 
+    private final Consumer<Path> onSaved;
+    private Button undoBtn, redoBtn, saveBtn;
+
     //tool states
+    private Tool tool = Tool.BRUSH;
     private float hue = 0f, sat = 0.76f, val = 1f;
     private double brush = 5;
-    private Tool tool = Tool.BRUSH;
     private double[] shapeA, shapeB;
     private List<double[]> drawing;
     private boolean paletteOpen = false, pickingWheel = false, pickingBright = false;
-
-    private Button undoBtn, redoBtn;
 
     private EditBox textBox;
     private boolean bold = false, italic = false, underline = false, strike = false;
     private Button boldBtn, italicBtn, underBtn, strikeBtn;
     private final List<AbstractWidget> textWidgets = new ArrayList<>();
 
-    public EditorScreen(Screen parent, Path file) {
+    public EditorScreen(Screen parent, Path file, Consumer<Path> onSaved) {
         super(Component.translatable("lightbox.screen.editor"));
         this.parent = parent;
         this.file = file;
+        this.onSaved = onSaved;
     }
 
     @Override
@@ -98,7 +103,7 @@ public class EditorScreen extends Screen {
         int ay = TOP + 5 * 24 + 12;
         undoBtn = addIcon("undo", 10, ay, false, this::undo);
         redoBtn = addIcon("redo", 10, ay + 24, false, this::redo);
-        addIcon("save", 10, ay + 48, false, () -> {});
+        saveBtn = addIcon("save", 10, ay + 48, false, this::openSave);
 
         // bottom bar - size slider
         addRenderableWidget(new ValueSlider(x0() + 104, height - 30, 204, 20,
@@ -512,6 +517,7 @@ public class EditorScreen extends Screen {
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
         undoBtn.active = !ops.isEmpty();
         redoBtn.active = !redoStack.isEmpty();
+        saveBtn.active = !ops.isEmpty();
 
         boolean showText = tool == Tool.TEXT;
         for (AbstractWidget w : textWidgets) {
@@ -667,6 +673,11 @@ public class EditorScreen extends Screen {
         }
     }
 
+    private void openSave() {
+        if (ops.isEmpty()) return;
+        minecraft.gui.setScreen(new SaveScreen(this, file, current, onSaved));
+    }
+
     @Override
     public void removed() {
         if (texId != null) {
@@ -683,6 +694,15 @@ public class EditorScreen extends Screen {
     public void onClose() {
         if (paletteOpen) {
             paletteOpen = false;
+            return;
+        }
+        if (!ops.isEmpty()) { //unsaved edits
+            minecraft.gui.setScreen(new ConfirmScreen(
+                    discard -> minecraft.gui.setScreen(discard ? parent : this),
+                    Component.translatable("lightbox.editor.discard.title"),
+                    Component.translatable("lightbox.editor.discard.message"),
+                    Component.translatable("lightbox.editor.discard.yes"),
+                    Component.translatable("lightbox.editor.discard.no")));
             return;
         }
         minecraft.gui.setScreen(parent);

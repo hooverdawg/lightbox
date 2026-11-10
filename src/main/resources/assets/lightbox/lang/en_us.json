@@ -33,11 +33,19 @@
   "lightbox.editor.italic": "Italic",
   "lightbox.editor.underline": "Underline",
   "lightbox.editor.strike": "Strikethrough",
+  "lightbox.editor.discard.title": "Discard your edits?",
+  "lightbox.editor.discard.message": "Your changes haven't been saved.",
+  "lightbox.editor.discard.yes": "Discard changes",
+  "lightbox.editor.discard.no": "Keep editing",
   "lightbox.confirm.delete.title": "Are you sure you want to delete this screenshot?",
   "lightbox.confirm.delete.message": "'%s' will be lost forever! (A long time!)",
   "lightbox.confirm.delete.many.title": "Are you sure you want to delete %s screenshots?",
   "lightbox.confirm.delete.many.message": "They will be lost forever! (A long time!)",
   "lightbox.rename.title": "Rename screenshot",
   "lightbox.rename.exists": "A file with that name already exists",
-  "lightbox.rename.failed": "Couldn't rename the file"
+  "lightbox.rename.failed": "Couldn't rename the file",
+  "lightbox.save.title": "Save your edits",
+  "lightbox.save.copy": "Save as copy",
+  "lightbox.save.overwrite": "Overwrite image",
+  "lightbox.save.failed": "Couldn't save the image"
 }

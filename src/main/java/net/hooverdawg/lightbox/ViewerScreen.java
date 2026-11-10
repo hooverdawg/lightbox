@@ -77,7 +77,8 @@ public class ViewerScreen extends Screen {
             if (favBtn) press = _ -> toggleFav();
             if (delBtn) press = _ -> Actions.askDelete(minecraft, file, this, parent);
             if (renBtn) press = _ -> Actions.rename(minecraft, this, file, t -> minecraft.gui.setScreen(new ViewerScreen(parent, t)));
-            if (ediBtn) press = _ -> minecraft.gui.setScreen(new EditorScreen(this, file));
+            if (ediBtn) press = _ -> minecraft.gui.setScreen(new EditorScreen(this, file,
+                    saved -> minecraft.gui.setScreen(new ViewerScreen(parent, saved))));
 
             Button b = SpriteIconButton.builder(tip, press, true)
                     .width(20)
