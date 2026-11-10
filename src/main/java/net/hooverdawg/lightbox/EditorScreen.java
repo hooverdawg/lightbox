@@ -3,7 +3,9 @@ package net.hooverdawg.lightbox;
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.geom.Ellipse2D;
+import java.awt.geom.Line2D;
 import java.awt.geom.Path2D;
+import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -15,10 +17,8 @@ import java.util.function.DoubleConsumer;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.AbstractSliderButton;
+import net.minecraft.client.gui.components.*;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.SpriteIconButton;
-import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.RenderPipelines;
@@ -27,18 +27,22 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
 public class EditorScreen extends Screen {
-    private static final int SIDE = 40, TOP = 36, BTM = 70; // room for toolbar/topbar/sliders
+    private static final int SIDE = 40, TOP = 36, BTM = 70;
     private static final int WHEEL_D = 100, WHEEL_TEX = 200, PANEL_W = 116, PANEL_H = 140;
 
     //every edit is one operation, or 'Op'
     private interface Op {}
     private record Stroke(int rgb, float size, List<double[]> pts) implements Op {}
+    private enum Tool { BRUSH, TEXT, RECT, ARROW }
+    private record Rect(int rgb, float size, double x1, double y1, double x2, double y2) implements Op {}
+    private record Arrow(int rgb, float size, double x1, double y1, double x2, double y2) implements Op {}
+    private record Text(int rgb, float px, double x, double y, String text) implements Op {}
 
     private final Screen parent;
     private final Path file;
 
     private BufferedImage base; // original image
-    private BufferedImage current; // shown image (same as og for now)
+    private BufferedImage current; // shown image
     private boolean loadFailed = false;
 
     private final List<Op> ops = new ArrayList<>();
@@ -50,13 +54,16 @@ public class EditorScreen extends Screen {
     private float scale;
     private int ox, oy, dw, dh;
 
-    //tool state
+    //tool states
     private float hue = 0f, sat = 0.76f, val = 1f;
     private double brush = 5;
-    private List<double[]> drawing; // stroke being drawn or null
+    private Tool tool = Tool.BRUSH;
+    private double[] shapeA, shapeB;
+    private List<double[]> drawing;
     private boolean paletteOpen = false, pickingWheel = false, pickingBright = false;
 
     private Button undoBtn, redoBtn;
+    private EditBox textBox;
 
     public EditorScreen(Screen parent, Path file) {
         super(Component.translatable("lightbox.screen.editor"));
@@ -70,10 +77,10 @@ public class EditorScreen extends Screen {
                 .bounds(width / 2 - 50, 8, 100, 20).build());
 
         // toolbar down left side
-        addIcon("pen", 10, TOP, true, () -> {});
-        addIcon("text", 10, TOP + 24, false, () -> {});
-        addIcon("rectangle", 10, TOP + 48, false, () -> {});
-        addIcon("arrow", 10, TOP + 72, false, () -> {});
+        addIcon("brush", 10, TOP, true, () -> tool = Tool.BRUSH);
+        addIcon("text", 10, TOP + 24, true, () -> {tool = Tool.TEXT; setInitialFocus(textBox);});
+        addIcon("rectangle", 10, TOP + 48, true, () -> tool = Tool.RECT);
+        addIcon("arrow", 10, TOP + 72, true, () -> tool = Tool.ARROW);
         addIcon("crop", 10, TOP + 96, false, () -> {});
 
         int ay = TOP + 5 * 24 + 12;
@@ -81,10 +88,18 @@ public class EditorScreen extends Screen {
         redoBtn = addIcon("redo", 10, ay + 24, false, this::redo);
         addIcon("save", 10, ay + 48, false, () -> {});
 
-        // bottom bar - colour swatch + size slider
+        // bottom bar - size slider
         addRenderableWidget(new ValueSlider(x0() + 104, height - 30, 204, 20,
                 "lightbox.editor.size", 1, 60, brush, v -> brush = v));
 
+        // text box (when text button selected)
+        String keep = textBox != null ? textBox.getValue() : "";
+        textBox = new EditBox(font, x0(), height - 56, 308, 20, Component.translatable("lightbox.editor.textbox"));
+        textBox.setMaxLength(120);
+        textBox.setValue(keep);
+        addRenderableWidget(textBox);
+
+        //colour swatch
         if (wheelId == null) buildWheel();
         if (base == null && !loadFailed) loadBase();
         if (texId == null && current != null) refreshTexture(current);
@@ -117,10 +132,10 @@ public class EditorScreen extends Screen {
             for (int x = 0; x < n; x++) {
                 double dx = x + 0.5 - c, dy = y + 0.5 - c;
                 double r = Math.hypot(dx, dy);
-                if (r > rad + 1) continue; // outside circle, stays transparent
+                if (r > rad + 1) continue;
                 float h = (float) ((Math.atan2(dy, dx) / (2 * Math.PI) + 1.0) % 1.0);
                 float s = (float) Math.min(1.0, r / rad);
-                int a = r <= rad ? 255 : (int) Math.max(0, 255 * (rad + 1 - r)); //soft edge
+                int a = r <= rad ? 255 : (int) Math.max(0, 255 * (rad + 1 - r));
                 img.setRGB(x, y, (a << 24) | (Color.HSBtoRGB(h, s, 1f) & 0xFFFFFF));
             }
         }
@@ -192,10 +207,42 @@ public class EditorScreen extends Screen {
         }
     }
 
+    private static double[] arrowGeo(double x1, double y1, double x2, double y2, double size) {
+        double len = Math.hypot(x2 - x1, y2 - y1);
+        if (len <1) return new double[] {x2, y2, x2, y2, x2, y2};
+        double ang = Math.atan2(y2 - y1, x2 - x1);
+        double hl = Math.min(Math.max(14, size * 4), len * 0.7);
+        double hw = hl * 0.55;
+        double bx = x2 - Math.cos(ang) * hl, by = y2 - Math.sin(ang) * hl;
+        return new double[] {
+                bx, by,
+                bx + Math.cos(ang - Math.PI / 2) * hw, by + Math.sin(ang - Math.PI / 2) * hw,
+                bx + Math.cos(ang + Math.PI / 2) * hw, by + Math.sin(ang + Math.PI / 2) * hw
+        };
+    }
+
+    private float textPx() {
+        return (float) (12 + brush * 3); // slider 1-60 gives 15-192 px
+    }
+
+    private static int[] textSize(String text, float px) {
+        try {
+            Graphics2D g = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB).createGraphics();
+            g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, Math.round(px)));
+            FontMetrics fm = g.getFontMetrics();
+            int[] size = {fm.stringWidth(text), fm.getHeight()};
+            g.dispose();
+            return size;
+        } catch (Throwable t) {
+            return new int[] {(int) (text.length() * px * 0.6), (int) (px * 1.2)};
+        }
+    }
+
     private BufferedImage applyOp(BufferedImage img, Op op) {
-        if (op instanceof Stroke s) {
-            Graphics2D g = img.createGraphics();
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        Graphics2D g = img.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        if (op instanceof Stroke s) { // brush tool
             g.setColor(new Color(s.rgb()));
             if (s.pts().size() == 1) {
                 double[] p = s.pts().getFirst();
@@ -212,8 +259,41 @@ public class EditorScreen extends Screen {
                 }
                 g.draw(path);
             }
-            g.dispose();
+
+        } else if (op instanceof Rect r) { // rectangle tool
+            g.setColor(new Color(r.rgb()));
+            g.setStroke(new BasicStroke(r.size(), BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER));
+            g.draw(new Rectangle2D.Double(Math.min(r.x1(), r.x2()), Math.min(r.y1(), r.y2()),
+                    Math.abs(r.x2() - r.x1()), Math.abs(r.y2() - r.y1())));
+
+        } else if (op instanceof Arrow a) { // arrow tool
+            g.setColor(new Color(a.rgb()));
+            double[] geo = arrowGeo(a.x1(), a.y1(), a.x2(), a.y2(), a.size());
+            g.setStroke(new BasicStroke(a.size(), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g.draw(new Line2D.Double(a.x1(), a.y1(), geo[0], geo[1]));
+            Path2D.Double head = new Path2D.Double();
+            head.moveTo(a.x2(), a.y2());
+            head.lineTo(geo[2], geo[3]);
+            head.lineTo(geo[4], geo[5]);
+            head.closePath();
+            g.fill(head);
+        } else if (op instanceof Text t) { // text tool
+            try {
+                g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, Math.round(t.px())));
+                int baseline = (int) Math.round(t.y()) + g.getFontMetrics().getAscent();
+                int off = Math.max(1, Math.round(t.px() / 14f));
+                g.setColor(new Color(0, 0, 0, 150)); // added shadow for readability
+                g.drawString(t.text(), (float) t.x() + off, baseline + off);
+                g.setColor(new Color(t.rgb()));
+                g.drawString(t.text(), (float) t.x(), baseline);
+            } catch (Throwable ignored) {
+                // if java can't load font, skip text instead of crashing
+            }
         }
+
+
+        g.dispose();
         return img;
     }
 
@@ -290,8 +370,17 @@ public class EditorScreen extends Screen {
         }
         if (super.mouseClicked(event, doubleClick)) return true; // buttons & size slider
         if (event.button() == 0 && texId != null && insideImage(mx, my)) {
-            drawing = new ArrayList<>();
-            drawing.add(new double[] {toImgX(mx), toImgY(my)});
+            double ix = toImgX(mx), iy = toImgY(my);
+            if (tool == Tool.TEXT) {
+                String s = textBox.getValue();
+                if (!s.isBlank()) commit(new Text(rgb(), textPx(), ix, iy, s));
+            } else if (tool == Tool.BRUSH) {
+                drawing = new ArrayList<>();
+                drawing.add(new double[] {ix, iy});
+            } else {
+                shapeA = new double[] {ix, iy};
+                shapeB = shapeA;
+            }
             return true;
         }
         return false;
@@ -305,6 +394,10 @@ public class EditorScreen extends Screen {
         }
         if (pickingBright) {
             pickBright(event.x());
+            return true;
+        }
+        if (shapeA != null) {
+            shapeB = new double[] {toImgX(event.x()), toImgY(event.y())};
             return true;
         }
         if (drawing != null) {
@@ -325,6 +418,18 @@ public class EditorScreen extends Screen {
             pickingBright = false;
             return true;
         }
+        if (shapeA != null && event.button() == 0) {
+            double[] a = shapeA, b = shapeB;
+            shapeA = null;
+            shapeB = null;
+            if (Math.hypot(b[0] - a[0], b[1] - a[1]) * scale >= 3) { // ignore tiny drags
+                commit(tool == Tool.RECT
+                    ? new Rect(rgb(), (float) brush, a[0], a[1], b[0], b[1])
+                    : new Arrow(rgb(), (float) brush, a[0], a[1], b[0], b[1]));
+            }
+            return true;
+        }
+
         if (drawing != null && event.button() == 0) {
             commit(new Stroke(rgb(), (float) brush, drawing));
             drawing = null;
@@ -337,8 +442,13 @@ public class EditorScreen extends Screen {
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
         undoBtn.active = !ops.isEmpty();
         redoBtn.active = !redoStack.isEmpty();
+        textBox.visible = tool == Tool.TEXT;
+        textBox.active = tool == Tool.TEXT;
 
         super.extractRenderState(graphics, mouseX, mouseY, delta);
+
+        int hy = switch (tool) { case BRUSH -> TOP; case TEXT -> TOP + 24; case RECT -> TOP + 48; case ARROW -> TOP + 72; };
+        graphics.outline(8, hy - 2, 24, 24, 0xFFFFFF55);
 
         if (texId == null) {
             if (loadFailed) {
@@ -377,6 +487,39 @@ public class EditorScreen extends Screen {
                 }
             }
             graphics.disableScissor();
+        }
+        if (shapeA != null) {
+            graphics.enableScissor(ox, oy, ox + dw, oy + dh);
+            int argb = 0xFF000000 | rgb();
+            int d = Math.max(1, Math.round((float) brush * scale));
+            double[] a = shapeA, b = shapeB;
+            if (tool == Tool.RECT) {
+                stampLine(graphics, a[0], a[1], b[0], a[1], d, argb);
+                stampLine(graphics, b[0], a[1], b[0], b[1], d, argb);
+                stampLine(graphics, b[0], b[1], a[0], b[1], d, argb);
+                stampLine(graphics, a[0], b[1], a[0], a[1], d, argb);
+            } else {
+                double[] geo = arrowGeo(a[0], a[1], b[0], b[1], brush);
+                stampLine(graphics, a[0], a[1], b[0], b[1], d, argb);
+                stampLine(graphics, b[0], b[1], geo[2], geo[3], d, argb);
+                stampLine(graphics, b[0], b[1], geo[4], geo[5], d, argb);
+                stampLine(graphics, geo[2], geo[3], geo[4], geo[5], d, argb);
+            }
+            graphics.disableScissor();
+        }
+        if (tool == Tool.TEXT) {
+            Component hint = Component.translatable("lightbox.editor.texthint");
+            graphics.text(font, hint, x0(), height - 68, 0xFFAAAAAA, true);
+
+            String s = textBox.getValue();
+            if (!s.isBlank() && insideImage(mouseX, mouseY) && !(paletteOpen && inPanel(mouseX,mouseY))) {
+                int[] sz = textSize(s, textPx());
+                graphics.enableScissor(ox, oy, ox + dw, oy + dh);
+                int bx = mouseX, by = mouseY, bw = Math.round(sz[0] * scale), bh = Math.round(sz[1] * scale);
+                graphics.outline(bx - 1, by - 1, bw + 2, bh + 2, 0xFF000000);
+                graphics.outline(bx, by, bw, bh, 0xFF000000 | rgb());
+                graphics.disableScissor();
+            }
         }
 
         //colour swatch
@@ -423,6 +566,14 @@ public class EditorScreen extends Screen {
         int sx = (int) Math.round(ox + ix * scale - d / 2.0);
         int sy = (int) Math.round(oy + iy * scale - d / 2.0);
         g.fill(sx, sy, sx + d, sy + d, argb);
+    }
+
+    private void stampLine(GuiGraphicsExtractor g, double x1, double y1, double x2, double y2, int d, int argb) {
+        double dist = Math.hypot(x2 - x1, y2 - y1) * scale;
+        int steps = Math.max(1, (int) Math.ceil(dist / Math.max(1.0, d / 2.0)));
+        for (int s = 0; s <= steps; s++) {
+            stamp(g, x1 + (x2 - x1) * s / steps, y1 + (y2 - y1) * s / steps, d, argb);
+        }
     }
 
     @Override
