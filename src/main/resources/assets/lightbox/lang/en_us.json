@@ -3,6 +3,7 @@
   "lightbox.screen.viewer": "Screenshot",
   "lightbox.screen.editor": "Edit Screenshot",
   "lightbox.button.gallery": "Screenshots",
+  "lightbox.button.folder": "Open screenshots folder",
   "lightbox.button.rename": "Rename",
   "lightbox.button.favourite": "Favorite",
   "lightbox.button.unfavourite": "Unfavorite",

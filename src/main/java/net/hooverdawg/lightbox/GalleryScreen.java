@@ -21,9 +21,10 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 
 public class GalleryScreen extends Screen {
-    private static final int CELL_W = 96, CELL_H = 54, GAP = 8, TOP = 30, BTM = 36, MENU_W = 140, ROW_H = 14;
+    private static final int CELL_W = 96, CELL_H = 54, GAP = 8, TOP = 30, BTM = 36, MENU_W = 140, ROW_H = 14, LABEL_H = 11;
+    private static final int PITCH = CELL_H + LABEL_H + GAP;
     private int cellX(int i) { return left() + (i % cols()) * (CELL_W + GAP); }
-    private int cellY(int i) { return TOP + GAP + (i / cols()) * (CELL_H + GAP) - scroll; }
+    private int cellY(int i) { return TOP + GAP + (i / cols()) * PITCH - scroll; }
 
     private final Screen parent;
     private List<Path> files = List.of();
@@ -55,6 +56,9 @@ public class GalleryScreen extends Screen {
                 .bounds(width - 80, 6, 70, 20).build();
         addRenderableWidget(selectBtn);
 
+        addRenderableWidget(Actions.iconButton("folder", "lightbox.button.folder",
+                width - 80 - 24, 6, _ -> Actions.openFolder()));
+
         deleteBtn = Button.builder(Component.empty(), _ -> askDeleteSelected())
                 .bounds(width / 2 + 6, height - 28, 130, 20).build();
         addRenderableWidget(deleteBtn);
@@ -83,7 +87,7 @@ public class GalleryScreen extends Screen {
 
     private int maxScroll() {
         int rows = (files.size() + cols() - 1) / cols();
-        return Math.max(0, rows * (CELL_H + GAP) + GAP - (height - TOP - BTM));
+        return Math.max(0, rows * PITCH + GAP - (height - TOP - BTM));
     }
 
     private int indexAt(double mx,  double my) {
@@ -93,6 +97,14 @@ public class GalleryScreen extends Screen {
             if (mx >= x && mx < x + CELL_W && my >= y && my < y + CELL_H) return i;
         }
         return -1;
+    }
+
+    private String fileLabel(Path p) {
+        String n = p.getFileName().toString();
+        if (n.endsWith(".png")) n = n.substring(0, n.length() - 4);
+        if (font.width(n) <= CELL_W) return n;
+        String dots = "...";
+        return font.plainSubstrByWidth(n, CELL_W - font.width(dots)) + dots;
     }
 
     private int menuRowAt(double mx, double my) {
@@ -139,7 +151,7 @@ public class GalleryScreen extends Screen {
         for (int i = 0; i < files.size(); i++) {
             int x = cellX(i);
             int y = cellY(i);
-            if (y + CELL_H < TOP || y > height - BTM) continue; // only load visible
+            if (y + CELL_H + LABEL_H < TOP || y > height - BTM) continue; // only load visible
 
             Tex t = getTex(files.get(i));
             if (t.id() != null) {
@@ -147,6 +159,9 @@ public class GalleryScreen extends Screen {
                         CELL_W, CELL_H, t.w(), t.h(), t.w(), t.h());
             }
             graphics.outline(x, y, CELL_W, CELL_H, 0xFF000000);
+
+            String label = fileLabel(files.get(i));
+            graphics.text(font, label, x + (CELL_W - font.width(label)) / 2, y + CELL_H + 2, 0xFFCCCCCC, false);
 
             if (selectMode) {
                 String fname = files.get(i).getFileName().toString();

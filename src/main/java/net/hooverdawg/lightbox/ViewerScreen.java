@@ -52,9 +52,12 @@ public class ViewerScreen extends Screen {
 
     @Override
     protected void init() {
-        // exit on top
+        // exit and folderBtn on top
         addRenderableWidget(Button.builder(Component.translatable("lightbox.button.back"), _ -> onClose())
                 .bounds(width / 2 - 50, 8, 100, 20).build());
+
+        addRenderableWidget(Actions.iconButton("folder", "lightbox.button.folder",
+                width - 30, 8, _ -> Actions.openFolder()));
 
         // actions along bottom (unwired)
         String[] icons = {"rename", "favourite", "edit", "delete"};
