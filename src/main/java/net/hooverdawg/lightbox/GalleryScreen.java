@@ -111,7 +111,8 @@ public class GalleryScreen extends Screen {
                         true, () -> Favourites.toggle(name)),
                 new Entry(Component.translatable("lightbox.button.rename"), true,
                         () -> Actions.rename(minecraft, this, f, _ -> minecraft.gui.setScreen(this))),
-                new Entry(Component.translatable("lightbox.button.edit"), false, () -> {}), // not implemented
+                new Entry(Component.translatable("lightbox.button.edit"), true,
+                        () -> minecraft.gui.setScreen(new EditorScreen(this, f))),
                 new Entry(Component.translatable(fav ? "lightbox.button.delete.locked" : "lightbox.button.delete"),
                         !fav, () -> Actions.askDelete(minecraft, f, this, this))
         );

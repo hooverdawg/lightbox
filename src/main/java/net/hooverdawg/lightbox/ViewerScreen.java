@@ -65,6 +65,7 @@ public class ViewerScreen extends Screen {
             boolean favBtn = icons[i].equals("favourite");
             boolean delBtn = icons[i].equals("delete");
             boolean renBtn = icons[i].equals("rename");
+            boolean ediBtn = icons[i].equals("edit");
 
             Component tip = Component.translatable(
                 favBtn && isFav ? "lightbox.button.unfavourite"
@@ -76,6 +77,7 @@ public class ViewerScreen extends Screen {
             if (favBtn) press = _ -> toggleFav();
             if (delBtn) press = _ -> Actions.askDelete(minecraft, file, this, parent);
             if (renBtn) press = _ -> Actions.rename(minecraft, this, file, t -> minecraft.gui.setScreen(new ViewerScreen(parent, t)));
+            if (ediBtn) press = _ -> minecraft.gui.setScreen(new EditorScreen(this, file));
 
             Button b = SpriteIconButton.builder(tip, press, true)
                     .width(20)
@@ -83,7 +85,7 @@ public class ViewerScreen extends Screen {
                     .build();
             b.setPosition(startX + i * (20 + gap), height - 28);
             b.setTooltip(Tooltip.create(tip));
-            b.active = favBtn || renBtn || (delBtn && !isFav); // delete greyed out for favourites
+            b.active = favBtn || renBtn || ediBtn || (delBtn && !isFav); // delete greyed out for favourites
             addRenderableWidget(b);
         }
 
