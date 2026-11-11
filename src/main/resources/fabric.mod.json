@@ -11,7 +11,7 @@
 		"homepage": "https://hooverdawg.nekoweb.org/",
 		"sources": "https://github.com/hooverdawg/lightbox"
 	},
-	"license": "PolyForm-Noncommercial-1.0.0",
+	"license": "MIT",
 	"icon": "assets/lightbox/icon.png",
 	"environment": "client",
 	"entrypoints": {
