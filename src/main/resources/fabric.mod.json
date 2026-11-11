@@ -9,20 +9,14 @@
 	],
 	"contact": {
 		"homepage": "https://hooverdawg.nekoweb.org/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"sources": "https://github.com/hooverdawg/lightbox"
 	},
-	"license": "CC0-1.0",
+	"license": "PolyForm-Noncommercial-1.0.0",
 	"icon": "assets/lightbox/icon.png",
-	"environment": "*",
+	"environment": "client",
 	"entrypoints": {
-		"main": [
-			"net.hooverdawg.lightbox.Lightbox"
-		],
 		"client": [
 			"net.hooverdawg.lightbox.LightboxClient"
-		],
-		"fabric-datagen": [
-			"net.hooverdawg.lightbox.LightboxDataGenerator"
 		]
 	},
 	"mixins": [

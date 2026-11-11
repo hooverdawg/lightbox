@@ -16,7 +16,6 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
 
 import com.mojang.blaze3d.platform.InputConstants;
 
@@ -32,7 +31,7 @@ public class LightboxClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         KeyMapping.Category category = KeyMapping.Category.register(
-                Identifier.fromNamespaceAndPath("lightbox", "screenshots"));
+                Lightbox.id( "screenshots"));
 
         galleryKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.lightbox.gallery",
@@ -92,7 +91,7 @@ public class LightboxClient implements ClientModInitializer {
         Button b = SpriteIconButton.builder(label,
                 _ -> client.gui.setScreen(new GalleryScreen(screen)), true)
                 .width(BTN)
-                .sprite(Identifier.fromNamespaceAndPath("lightbox", "icon/gallery"), 16, 16)
+                .sprite(Lightbox.id( "icon/gallery"), 16, 16)
                 .build();
         b.setPosition(x, y);
         b.setTooltip(Tooltip.create(label));

@@ -92,7 +92,7 @@ public class ViewerScreen extends Screen {
 
             Button b = SpriteIconButton.builder(tip, press, true)
                     .width(20)
-                    .sprite(Identifier.fromNamespaceAndPath("lightbox", "icon/" + icons[i]), 16, 16)
+                    .sprite(Lightbox.id( "icon/" + icons[i]), 16, 16)
                     .build();
             b.setPosition(startX + i * (20 + gap), height - 28);
             b.setTooltip(Tooltip.create(tip));
@@ -106,12 +106,13 @@ public class ViewerScreen extends Screen {
     private void loadTexture() {
         try (InputStream in = Files.newInputStream(file)) {
             NativeImage img = NativeImage.read(in);
-            texId = Identifier.fromNamespaceAndPath("lightbox", "viewer");
+            texId = Lightbox.id( "viewer");
             minecraft.getTextureManager().register(texId,
                     new DynamicTexture(() -> "lightbox viewer", img));
             imgW = img.getWidth();
             imgH = img.getHeight();
         } catch (IOException e) {
+            Lightbox.LOGGER.warn("Couldn't load {}", file, e);
             texId = null;
         }
     }

@@ -78,6 +78,7 @@ public class SaveScreen extends Screen {
         try {
             write(copyTarget);
         } catch (IOException e) {
+            Lightbox.LOGGER.warn("Couldn't save {}", copyTarget, e);
             error = Component.translatable("lightbox.save.failed");
             return;
         }
@@ -90,6 +91,7 @@ public class SaveScreen extends Screen {
         try {
             write(original);
         } catch (IOException e) {
+            Lightbox.LOGGER.warn("Couldn't save {}", copyTarget, e);
             error = Component.translatable("lightbox.save.failed");
             return;
         }

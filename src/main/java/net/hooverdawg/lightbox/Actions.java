@@ -8,7 +8,6 @@ import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
 import net.minecraft.util.Util;
 
 import java.awt.*;
@@ -26,7 +25,7 @@ public final class Actions {
             Files.deleteIfExists(f);
             MetaStore.remove(f.getFileName().toString());
         } catch (IOException e) {
-            // skip, keep going
+            Lightbox.LOGGER.warn("Couldn't delete {}", f, e);
         }
     }
 
@@ -66,7 +65,7 @@ public final class Actions {
         Component tip = Component.translatable(langKey);
         Button b = SpriteIconButton.builder(tip, press, true)
                 .width(20)
-                .sprite(Identifier.fromNamespaceAndPath("lightbox", "icon/" + icon), 16, 16)
+                .sprite(Lightbox.id( "icon/" + icon), 16, 16)
                 .build();
         b.setPosition(x, y);
         b.setTooltip(Tooltip.create(tip));
@@ -78,7 +77,7 @@ public final class Actions {
         try {
             Files.createDirectories(dir); // in case of no screenshots
         } catch (IOException e) {
-            // fall through
+            Lightbox.LOGGER.warn("Couldn't create {}", dir, e);
         }
         Util.getPlatform().openPath(dir);
     }

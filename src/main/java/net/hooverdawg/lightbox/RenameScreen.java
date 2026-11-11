@@ -92,6 +92,7 @@ public class RenameScreen extends Screen {
         try {
             Files.move(file, target);
         } catch (IOException e) {
+            Lightbox.LOGGER.warn("Couldn't rename {} to {}", old, neu, e);
             error = Component.translatable("lightbox.rename.failed");
             return;
         }

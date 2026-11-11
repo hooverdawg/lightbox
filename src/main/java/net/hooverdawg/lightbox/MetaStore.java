@@ -4,12 +4,14 @@ import java.io.IOException;
 import java.io.Reader;
 import java.lang.reflect.Type;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonParseException;
 import com.google.gson.reflect.TypeToken;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
@@ -29,8 +31,10 @@ public final class MetaStore {
         if (data == null) {
             try (Reader r = Files.newBufferedReader(file())) {
                 data = GSON.fromJson(r, TYPE);
-            } catch (IOException e) {
+            } catch (NoSuchFileException e) {
                 // no file yet
+            } catch (IOException | JsonParseException e) {
+                Lightbox.LOGGER.warn("Couldn't read {}, starting fresh", file(), e);
             }
             if (data == null) data = new HashMap<>();
         }
@@ -55,7 +59,7 @@ public final class MetaStore {
             Files.createDirectories(file().getParent());
             Files.writeString(file(), GSON.toJson(data, TYPE));
         } catch (IOException e) {
-            // best effort
+            Lightbox.LOGGER.warn("Couldn't save {}", file(), e);
         }
     }
 

@@ -1,6 +1,7 @@
 package net.hooverdawg.lightbox;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonParseException;
 import com.google.gson.reflect.TypeToken;
 
 import net.fabricmc.loader.api.FabricLoader;
@@ -10,13 +11,14 @@ import java.io.IOException;
 import java.io.Reader;
 import java.lang.reflect.Type;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Set;
 
 public final class Favourites {
     public static final Identifier STAR =
-            Identifier.fromNamespaceAndPath("lightbox", "textures/gui/sprites/icon/star.png");
+            Lightbox.id( "textures/gui/sprites/icon/star.png");
 
     private static final Gson GSON = new Gson();
     private static final Type TYPE = new TypeToken<Set<String>>() {}.getType();
@@ -32,8 +34,10 @@ public final class Favourites {
         if (data == null) {
             try (Reader r = Files.newBufferedReader(file())) {
                 data = GSON.fromJson(r, TYPE);
-            } catch (IOException e) {
+            } catch (NoSuchFileException e) {
                 // no file yet
+            } catch (IOException | JsonParseException e) {
+                Lightbox.LOGGER.warn("Couldn't read {}, starting fresh", file(), e);
             }
             if (data == null) data = new HashSet<>();
         }
@@ -55,7 +59,7 @@ public final class Favourites {
             Files.createDirectories(file().getParent());
             Files.writeString(file(), GSON.toJson(data, TYPE));
         } catch (IOException e) {
-            // best effort
+            Lightbox.LOGGER.warn("Couldn't save {}", file(), e);
         }
     }
 

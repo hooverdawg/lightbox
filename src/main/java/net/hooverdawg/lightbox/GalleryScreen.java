@@ -3,6 +3,7 @@ package net.hooverdawg.lightbox;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Stream;
@@ -72,7 +73,10 @@ public class GalleryScreen extends Screen {
             files = s.filter(p -> p.toString().endsWith(".png"))
                     .sorted(Comparator.reverseOrder()) // names are dates - newest first
                     .toList();
+        } catch (NoSuchFileException e) {
+            files = List.of();
         } catch (IOException e) {
+            Lightbox.LOGGER.warn("Couldn't list {}", dir, e);
             files = List.of();
         }
     }
@@ -282,11 +286,12 @@ public class GalleryScreen extends Screen {
         return textures.computeIfAbsent(file, p -> {
             try (InputStream in = Files.newInputStream(p)) {
                 NativeImage img = NativeImage.read(in);
-                Identifier id = Identifier.fromNamespaceAndPath("lightbox", "shot/" + counter++);
+                Identifier id = Lightbox.id( "shot/" + counter++);
                 minecraft.getTextureManager().register(id,
                         new DynamicTexture(() -> "lightbox screenshot", img));
                 return new Tex(id, img.getWidth(), img.getHeight());
             } catch (IOException e) {
+                Lightbox.LOGGER.warn("Couldn't load thumbnail for {}", p, e);
                 return new Tex(null, 0, 0); // rem. fails so we don't retry every frame
             }
         });

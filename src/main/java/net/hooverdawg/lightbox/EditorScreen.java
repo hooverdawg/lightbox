@@ -139,7 +139,7 @@ public class EditorScreen extends Screen {
         Component tip = Component.translatable("lightbox.button." + icon);
         Button b = SpriteIconButton.builder(tip, _ -> action.run(), true)
                 .width(20)
-                .sprite(Identifier.fromNamespaceAndPath("lightbox", "icon/" + icon), 16, 16)
+                .sprite(Lightbox.id( "icon/" + icon), 16, 16)
                 .build();
         b.setPosition(x, y);
         b.setTooltip(Tooltip.create(tip));
@@ -171,10 +171,11 @@ public class EditorScreen extends Screen {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             ImageIO.write(img, "png", out);
             NativeImage ni = NativeImage.read(new ByteArrayInputStream(out.toByteArray()));
-            wheelId = Identifier.fromNamespaceAndPath("lightbox", "wheel");
+            wheelId = Lightbox.id( "wheel");
             minecraft.getTextureManager().register(wheelId,
                     new DynamicTexture(() -> "lightbox wheel", ni));
         } catch (IOException e) {
+            Lightbox.LOGGER.warn("Couldn't build the colour wheel", e);
             wheelId = null;
         }
     }
@@ -225,12 +226,14 @@ public class EditorScreen extends Screen {
         try {
             BufferedImage src = ImageIO.read(file.toFile());
             if (src == null) {
+                Lightbox.LOGGER.warn("{} isn't a readable image", file);
                 loadFailed = true;
                 return;
             }
             base = copy(src);
             current = copy(base);
         } catch (IOException e) {
+            Lightbox.LOGGER.warn("Couldn't read {}", file, e);
             loadFailed = true;
         }
     }
@@ -290,6 +293,8 @@ public class EditorScreen extends Screen {
         return a.isEmpty() ? f : f.deriveFont(a);
     }
 
+    private static boolean fontWarned = false;
+
     private static int[] textSize(String text, Font font) {
         try {
             Graphics2D g = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB).createGraphics();
@@ -299,6 +304,10 @@ public class EditorScreen extends Screen {
             g.dispose();
             return size;
         } catch (Throwable t) {
+            if (!fontWarned) {
+                fontWarned = true;
+                Lightbox.LOGGER.warn("Couldn't measure text, using an estimate", t);
+            }
             return new int[] {(int) (text.length() * font.getSize() * 0.6), (int) (font.getSize() * 1.2)};
         }
     }
@@ -357,8 +366,8 @@ public class EditorScreen extends Screen {
                 int baseline = (int) Math.round(t.y()) + g.getFontMetrics().getAscent();
                 g.setColor(new Color(t.rgb()));
                 g.drawString(t.text(), (float) t.x(), baseline);
-            } catch (Throwable ignored) {
-                // if java can't load font, skip text instead of crashing
+            } catch (Throwable ex) {
+                Lightbox.LOGGER.warn("Couldn't draw text (are system fonts installed?)", ex);
             }
         }
 
@@ -396,13 +405,14 @@ public class EditorScreen extends Screen {
             NativeImage ni = NativeImage.read(new ByteArrayInputStream(out.toByteArray()));
 
             if (texId != null) minecraft.getTextureManager().release(texId);
-            texId = Identifier.fromNamespaceAndPath("lightbox", "editor");
+            texId = Lightbox.id( "editor");
             minecraft.getTextureManager().register(texId,
                     new DynamicTexture(() -> "lightbox editor", ni));
 
             imgW = ni.getWidth();
             imgH = ni.getHeight();
         } catch (IOException e) {
+            Lightbox.LOGGER.warn("Couldn't update the editor preview", e);
             texId = null;
             loadFailed = true;
         }
