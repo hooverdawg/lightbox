@@ -64,7 +64,7 @@ public class SaveScreen extends Screen {
         g.drawImage(image, 0, 0, null);
         g.dispose();
 
-        //write to temp file (failure doesnt dmg og)
+        //write to temp file (failure won't damage original)
         Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
         try {
             if (!ImageIO.write(rgb, "png", tmp.toFile())) throw new IOException("no PNG writer available");

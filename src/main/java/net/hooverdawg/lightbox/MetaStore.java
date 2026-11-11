@@ -67,7 +67,7 @@ public final class MetaStore {
         }
     }
 
-    // snapshot of where player is. null if not in world.
+    // snapshot of where player is. null if not in world
     public static ScreenshotMeta capture(Minecraft mc) {
         if (mc.player == null) return null;
         String world = "Unknown";

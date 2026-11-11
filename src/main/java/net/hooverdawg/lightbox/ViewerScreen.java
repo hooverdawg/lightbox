@@ -66,7 +66,7 @@ public class ViewerScreen extends Screen {
         addRenderableWidget(Actions.iconButton("folder", "lightbox.button.folder",
                 width - 30, 8, _ -> Actions.openFolder()));
 
-        // actions along bottom (unwired)
+        // actions along bottom
         String[] icons = {"rename", "favourite", "edit", "delete"};
         boolean isFav = Favourites.isFav(file.getFileName().toString());
         int gap = 4;
@@ -100,7 +100,7 @@ public class ViewerScreen extends Screen {
             addRenderableWidget(b);
         }
 
-        if (texId == null) loadTexture(); // init also runs on resize
+        if (texId == null) loadTexture();
     }
 
     private void loadTexture() {
@@ -220,7 +220,6 @@ public class ViewerScreen extends Screen {
             graphics.text(font, String.format("x%.1f", zoom), vx + 4, vy + 4, 0xFFFFFFFF, true);
         }
 
-        // translucent strip behind info for readability
         int stripTop = height - BTM + 2;
         graphics.fill(0, stripTop, width, stripTop + info.size() * 12 + 4, 0x90000000);
 
@@ -233,14 +232,14 @@ public class ViewerScreen extends Screen {
 
     private void toggleFav() {
         Favourites.toggle(file.getFileName().toString());
-        rebuildWidgets(); // re-runs init() so tooltip updates. image isn't reloaded
+        rebuildWidgets();
     }
 
     @Override
     public void removed() {
         if (texId != null) {
             minecraft.getTextureManager().release(texId);
-            texId = null; // reloaded if return
+            texId = null;
         }
     }
 

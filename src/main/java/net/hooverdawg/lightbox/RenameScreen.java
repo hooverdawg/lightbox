@@ -16,7 +16,7 @@ import java.util.function.Consumer;
 public class RenameScreen extends Screen {
     private static final String BAD_CHARS = "[\\\\/:*?\"<>|]";
 
-    private final Screen back; //new viewer needs as its parent
+    private final Screen back;
     private final Consumer<Path> onDone;
     private final Path file;
     private EditBox box;
@@ -37,7 +37,7 @@ public class RenameScreen extends Screen {
 
     @Override
     protected void init() {
-        String keep = box != null ? box.getValue() : baseName(); // resize survive
+        String keep = box != null ? box.getValue() : baseName();
 
         box = new EditBox(font, width / 2 - 100, height / 2 - 10, 200, 20, title);
         box.setMaxLength(100);
@@ -56,11 +56,11 @@ public class RenameScreen extends Screen {
             String clean = s.replaceAll(BAD_CHARS, "");
             if (!clean.equals(s)) { // illegal char typed/pasted: strip it
                 box.setValue(clean);
-                validate(); // in case setValue doesn't re-trigger the responder
+                validate();
                 return;
             }
             validate();
-        }); // set last, so 'ok' exists
+        });
         validate();
     }
 

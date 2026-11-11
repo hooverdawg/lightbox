@@ -41,7 +41,6 @@ public class EditorScreen extends Screen {
     private static final int SIDE = 40, TOP = 36, BTM = 70;
     private static final int WHEEL_D = 100, WHEEL_TEX = 200, PANEL_W = 116, PANEL_H = 140;
 
-    //every edit is one operation, or 'Op'
     private interface Op {}
     private enum Tool { BRUSH, TEXT, RECT, ARROW, CROP }
 
@@ -55,8 +54,8 @@ public class EditorScreen extends Screen {
     private final Screen parent;
     private final Path file;
 
-    private BufferedImage base; // original image
-    private BufferedImage current; // shown image
+    private BufferedImage base;
+    private BufferedImage current;
     private boolean loadFailed = false;
 
     private final List<Op> ops = new ArrayList<>();
@@ -259,7 +258,7 @@ public class EditorScreen extends Screen {
         int x2 = (int) Math.round(cl(Math.max(a[0], b[0]), 0, imgW));
         int y1 = (int) Math.round(cl(Math.min(a[1], b[1]), 0, imgH));
         int y2 = (int) Math.round(cl(Math.max(a[1], b[1]), 0, imgH));
-        if (x2 - x1 < 4 || y2 - y1 < 4) return; // too small
+        if (x2 - x1 < 4 || y2 - y1 < 4) return;
         commit(new Crop(x1, y1, x2 - x1, y2 - y1));
     }
 
@@ -409,7 +408,6 @@ public class EditorScreen extends Screen {
         }
     }
 
-    // screen pos -> image pixel
     double toImgX(double sx) {return (sx - ox) / scale; }
     double toImgY(double sy) {return (sy - oy) / scale; }
 
@@ -436,7 +434,7 @@ public class EditorScreen extends Screen {
         double mx = event.x(), my = event.y();
 
         if (event.button() == 0) {
-            if (paletteOpen && inPanel(mx, my)) { //absorb click
+            if (paletteOpen && inPanel(mx, my)) {
                 if (inWheel(mx, my)) {
                     pickingWheel = true;
                     pickWheel(mx, my);
@@ -450,7 +448,7 @@ public class EditorScreen extends Screen {
                 paletteOpen = !paletteOpen;
                 return true;
             }
-            paletteOpen = false; // click elsewhere closes
+            paletteOpen = false;
         }
         if (super.mouseClicked(event, doubleClick)) return true; // buttons & size slider
         if (event.button() == 0 && texId != null && insideImage(mx, my)) {
@@ -510,7 +508,7 @@ public class EditorScreen extends Screen {
             double[] a = shapeA, b = shapeB;
             shapeA = null;
             shapeB = null;
-            if (Math.hypot(b[0] - a[0], b[1] - a[1]) * scale >= 3) { // ignore tiny drags
+            if (Math.hypot(b[0] - a[0], b[1] - a[1]) * scale >= 3) {
                 if (tool == Tool.CROP) {
                     cropTo(a,b);
                 } else {
@@ -658,7 +656,7 @@ public class EditorScreen extends Screen {
                     wheelCx() - WHEEL_D / 2, wheelCy() - WHEEL_D / 2, 0, 0,
                     WHEEL_D, WHEEL_D, WHEEL_TEX, WHEEL_TEX, WHEEL_TEX, WHEEL_TEX);
         }
-        //marker showing current
+
         double ang = hue * 2 * Math.PI;
         int mx = (int) Math.round(wheelCx() + Math.cos(ang) * sat * (WHEEL_D / 2.0));
         int my = (int) Math.round(wheelCy() + Math.sin(ang) * sat * (WHEEL_D / 2.0));
@@ -699,7 +697,7 @@ public class EditorScreen extends Screen {
     public void removed() {
         if (texId != null) {
             minecraft.getTextureManager().release(texId);
-            texId = null; // init() rebuilds
+            texId = null;
         }
         if (wheelId != null) {
             minecraft.getTextureManager().release(wheelId);
@@ -740,7 +738,7 @@ public class EditorScreen extends Screen {
         }
 
         private double real() {
-            return min + value * (max - min); // 'value' is 0-1 pos
+            return min + value * (max - min);
         }
 
         @Override

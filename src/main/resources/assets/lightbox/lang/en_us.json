@@ -48,5 +48,7 @@
   "lightbox.save.title": "Save your edits",
   "lightbox.save.copy": "Save as copy",
   "lightbox.save.overwrite": "Overwrite image",
-  "lightbox.save.failed": "Couldn't save the image"
+  "lightbox.save.failed": "Couldn't save the image",
+  "key.category.lightbox.screenshots": "Lightbox",
+  "key.lightbox.gallery": "Open Screenshot Gallery"
 }

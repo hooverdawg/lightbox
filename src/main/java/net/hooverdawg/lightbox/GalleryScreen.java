@@ -13,6 +13,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -32,7 +33,7 @@ public class GalleryScreen extends Screen {
     private int scroll = 0;
 
     private record Entry(Component label, boolean enabled, Runnable action) {}
-    private List<Entry> menu = List.of(); // empty = closed
+    private List<Entry> menu = List.of();
     private int menuX, menuY;
 
     private boolean selectMode = false;
@@ -131,7 +132,7 @@ public class GalleryScreen extends Screen {
         );
 
         int h = menu.size() * ROW_H + 4;
-        menuX = Math.min(mx, width - MENU_W - 2); // keep on screen
+        menuX = Math.min(mx, width - MENU_W - 2);
         menuY = Math.min(my, height - h - 2);
     }
 
@@ -146,8 +147,6 @@ public class GalleryScreen extends Screen {
         super.extractRenderState(graphics, mouseX, mouseY, delta);
         graphics.text(font, title, (width - font.width(title)) / 2, 12, 0xFFFFFFFF, true);
 
-        int left = left();
-        int cols = cols();
         graphics.enableScissor(0, TOP, width, height - BTM);
         for (int i = 0; i < files.size(); i++) {
             int x = cellX(i);
@@ -162,12 +161,12 @@ public class GalleryScreen extends Screen {
             graphics.outline(x, y, CELL_W, CELL_H, 0xFF000000);
 
             String label = fileLabel(files.get(i));
-            graphics.text(font, label, x + (CELL_W - font.width(label)) / 2, y + CELL_H + 2, 0xFFCCCCCC, false);
+            graphics.text(font, label, x + (CELL_W - font.width(label)) / 2, y + CELL_H + 2, 0xFFCCCCCC, true);
 
             if (selectMode) {
                 String fname = files.get(i).getFileName().toString();
                 if (Favourites.isFav(fname)) {
-                    graphics.fill(x, y, x + CELL_W, y + CELL_H, 0x90000000); //dimmed
+                    graphics.fill(x, y, x + CELL_W, y + CELL_H, 0x90000000);
                 } else {
                     boolean on = selected.contains(fname);
                     if (on) graphics.fill(x, y, x + CELL_W, y + CELL_H, 0x604080FF);
@@ -178,7 +177,7 @@ public class GalleryScreen extends Screen {
 
             if (Favourites.isFav(files.get(i).getFileName().toString())) {
                 int sx = x + CELL_W - 18, sy = y + 2;
-                graphics.fill(sx - 1, sy - 1, sx + 17, sy + 17, 0x80000000); // dark backing - visibility
+                graphics.fill(sx - 1, sy - 1, sx + 17, sy + 17, 0x80000000);
                 graphics.blit(RenderPipelines.GUI_TEXTURED, Favourites.STAR, sx, sy, 0, 0, 16, 16, 16, 16);
             }
         }
@@ -219,7 +218,7 @@ public class GalleryScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        if (!menu.isEmpty()) { // open menu absorbs click
+        if (!menu.isEmpty()) {
             int row = menuRowAt(event.x(), event.y());
             List<Entry> m = menu;
             menu = List.of();
@@ -236,7 +235,7 @@ public class GalleryScreen extends Screen {
                 String fname = files.get(i).getFileName().toString();
                 if (!Favourites.isFav(fname) && !selected.remove(fname)) selected.add(fname);
             }
-            return true; // no viewer - no right click menu (when select)
+            return true;
         }
         if (event.button() == 0) {
             minecraft.gui.setScreen(new ViewerScreen(this, files.get(i)));
@@ -249,11 +248,20 @@ public class GalleryScreen extends Screen {
         return false;
     }
 
+    @Override
+    public boolean keyPressed(KeyEvent event) {
+        if (LightboxClient.galleryKey.matches(event)) {
+            onClose();
+            return true;
+        }
+        return super.keyPressed(event);
+    }
+
     private void toggleSelectMode() {
         selectMode = !selectMode;
         selected.clear();
         menu = List.of();
-        rebuildWidgets(); // re-runs init() so tooltip updates. image isn't reloaded
+        rebuildWidgets();
     }
 
     private void askDeleteSelected() {

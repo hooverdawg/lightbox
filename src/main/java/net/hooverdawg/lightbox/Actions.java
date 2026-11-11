@@ -30,7 +30,6 @@ public final class Actions {
         }
     }
 
-    // confirm, delete many. favourites are skipped
     public static void askDeleteMany(Minecraft mc, List<Path> files, Screen returnTo, Runnable afterDelete) {
         List<Path> targets = files.stream()
                 .filter(f -> !Favourites.isFav(f.getFileName().toString()))
@@ -47,7 +46,6 @@ public final class Actions {
                 Component.translatable("lightbox.confirm.delete.many.message")));
     }
 
-    // confirm, then delete. favourites are skipped
     public static void askDelete(Minecraft mc, Path file, Screen cancelTo, Screen afterDelete) {
         String name = file.getFileName().toString();
         if (Favourites.isFav(name)) return;
@@ -60,7 +58,6 @@ public final class Actions {
             Component.translatable("lightbox.confirm.delete.message", name)));
     }
 
-    // opens rename screen
     public static void rename(Minecraft mc, Screen back, Path file, Consumer<Path> onDone) {
         mc.gui.setScreen(new RenameScreen(back, file, onDone));
     }
