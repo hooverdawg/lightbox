@@ -6,6 +6,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.SpriteIconButton;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
@@ -24,6 +25,12 @@ public class ViewerScreen extends Screen {
     private final Path file;
     private Identifier texId;
     private int imgW, imgH;
+
+    private static final float MAX_ZOOM = 16f;
+    private float zoom = 1f;
+    private double panX = 0, panY = 0;
+    private boolean panning = false;
+    private double lastMx, lastMy;
 
     public ViewerScreen(Screen parent, Path file) {
         super(Component.translatable("lightbox.screen.viewer"));
@@ -109,6 +116,80 @@ public class ViewerScreen extends Screen {
         }
     }
 
+    private float fit() {
+        return Math.min((float) (width - 20) / imgW, (float) (height - TOP - BTM) / imgH);
+    }
+
+    private int vw() { return Math.round(imgW * fit()); }
+    private int vh() { return Math.round(imgH * fit()); }
+    private int vx() { return (width - vw()) / 2; }
+    private int vy() { return TOP + ((height - TOP - BTM) - vh()) / 2; }
+
+    private void clampPan() {
+        if (imgW <= 0 || imgH <= 0) return;
+        float s = fit() * zoom;
+        double maxX = Math.max(0, (imgW * s - vw()) / 2.0);
+        double maxY = Math.max(0, (imgH * s - vh()) / 2.0);
+        panX = Math.clamp(panX, -maxX, maxX);
+        panY = Math.clamp(panY, -maxY, maxY);
+    }
+
+    private boolean inViewport(double mx, double my) {
+        return mx >= vx() && mx < vx() + vw() && my >= vy() && my < vy() + vh();
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (texId == null || !inViewport(mouseX, mouseY)) {
+            return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        }
+        float newZoom = Math.max(1f, Math.min(MAX_ZOOM, zoom * (float) Math.pow(1.25, scrollY)));
+        float f = newZoom / zoom;
+        double cx = vx() + vw() / 2.0, cy = vy() + vh() / 2.0;
+        panX = (mouseX - cx) - (mouseX - cx - panX) * f;
+        panY = (mouseY - cy) - (mouseY - cy - panY) * f;
+        zoom = newZoom;
+        clampPan();
+        return true;
+    }
+
+    @Override
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (super.mouseClicked(event, doubleClick)) return true;
+        if (event.button() == 0 && texId != null && inViewport(event.x(), event.y())) {
+            if (doubleClick) {
+                zoom = 1f;
+                panX = 0;
+                panY = 0;
+            } else {
+                panning = true;
+                lastMx = event.x();
+                lastMy = event.y();
+            }
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        if (panning) {
+            panX += event.x() - lastMx;
+            panY += event.y() - lastMy;
+            lastMx = event.x();
+            lastMy = event.y();
+            clampPan();
+            return true;
+        }
+        return super.mouseDragged(event, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        panning = false;
+        return super.mouseReleased(event);
+    }
+
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
         super.extractRenderState(graphics, mouseX, mouseY, delta);
@@ -122,13 +203,22 @@ public class ViewerScreen extends Screen {
 
         if (texId == null) return;
 
-        int availW = width - 20, availH = height - TOP - BTM;
-        float scale = Math.min((float) availW / imgW, (float) availH / imgH);
-        int w = (int) (imgW * scale), h = (int) (imgH * scale);
-        int x = (width - w) / 2, y = TOP + (availH - h) / 2;
+        clampPan();
+        float scale = fit() * zoom;
+        int w = Math.round(imgW * scale), h = Math.round(imgH * scale);
+        int vx = vx(), vy = vy(), vw = vw(), vh = vh();
+        int x = Math.round(vx + vw / 2f + (float) panX - w / 2f);
+        int y = Math.round(vy + vh / 2f + (float) panY - h / 2f);
 
+        graphics.enableScissor(vx, vy, vx + vw, vy + vh);
         graphics.blit(RenderPipelines.GUI_TEXTURED, texId, x, y, 0, 0, w, h, imgW, imgH, imgW, imgH);
-        graphics.outline(x - 1, y - 1, w + 2, h + 2, 0xFFFFFFFF);
+        graphics.disableScissor();
+
+        graphics.outline(vx - 1, vy - 1, vw + 2, vh + 2, 0xFFFFFFFF);
+
+        if (zoom > 1.01f) {
+            graphics.text(font, String.format("x%.1f", zoom), vx + 4, vy + 4, 0xFFFFFFFF, true);
+        }
 
         // translucent strip behind info for readability
         int stripTop = height - BTM + 2;
