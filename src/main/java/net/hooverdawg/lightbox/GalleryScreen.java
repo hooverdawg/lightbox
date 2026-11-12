@@ -4,20 +4,13 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.stream.Stream;
 
 import com.mojang.blaze3d.platform.cursor.CursorTypes;
 import com.mojang.blaze3d.platform.NativeImage;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -79,17 +72,7 @@ public class GalleryScreen extends Screen {
     }
 
     private void loadFiles() {
-        Path dir = FabricLoader.getInstance().getGameDir().resolve("screenshots");
-        try (Stream<Path> s = Files.list(dir)) {
-            files = s.filter(p -> p.toString().endsWith(".png"))
-                    .sorted(Comparator.reverseOrder()) // names are dates - newest first
-                    .toList();
-        } catch (NoSuchFileException e) {
-            files = List.of();
-        } catch (IOException e) {
-            Lightbox.LOGGER.warn("Couldn't list {}", dir, e);
-            files = List.of();
-        }
+        files = Actions.listScreenshots();
     }
 
     private int left() {

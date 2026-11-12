@@ -4,6 +4,8 @@ Lightbox brings screenshot management and editing directly into Minecraft. Brows
 
 Lightbox is also fully client-side, meaning you can use it on your favourite servers!
 
+<img src="https://cdn.modrinth.com/data/cached_images/d8c18cd91df33931010a8952189ee3314fa012da.png" alt="An image showing the editor screen, editing a photo of a lobby on a minecraft server" width="75%"/>
+
 ## Gallery
 ### All of your screenshots in one place
 - Browse your screenshots in a scrollable gallery
@@ -26,7 +28,7 @@ Lightbox is also fully client-side, meaning you can use it on your favourite ser
 
 ## Editor
 ### Bring out your inner Monet
-- Pick from a colour wheel for all the colours
+- Pick from an RGB colour wheel
 - Draw arrows, rectangles, and write text
 - Crop the image to any ratio
 - Save the image as a copy, or overwrite it
@@ -41,11 +43,24 @@ Editor shortcuts:
 - Ctrl + Y or Ctrl + Shift + Z: Redo
 - Ctrl + S: Save
 
+Viewer:
+- Left/Right or A/D: Cycle screenshots
+
 In-game:
 - K: Open Gallery
 
+
 ![An image showing the Lightbox Keybind, default 'K'](https://cdn.modrinth.com/data/cached_images/c85d9711958b3baf2ad6e229a76bcc5e02b11c9c.png)
 
-*Requires Fabric API.
+### Planned Features:
+- biome metadata
+- dimension metadata
+- circle tool (editor)
+- copy/duplicate image
+- search screenshots
+- sort by
+  - Favourites
+  - A-Z / Z-A
+  - newest/oldest first
 
-*All code was human-written.
+*Requires Fabric API.

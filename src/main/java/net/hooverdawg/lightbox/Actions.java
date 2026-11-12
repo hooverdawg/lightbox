@@ -1,6 +1,7 @@
 package net.hooverdawg.lightbox;
 
 import net.fabricmc.loader.api.FabricLoader;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.SpriteIconButton;
@@ -13,9 +14,12 @@ import net.minecraft.util.Util;
 import java.awt.*;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 public final class Actions {
     private Actions() {}
@@ -80,5 +84,19 @@ public final class Actions {
             Lightbox.LOGGER.warn("Couldn't create {}", dir, e);
         }
         Util.getPlatform().openPath(dir);
+    }
+
+    public static List<Path> listScreenshots() {
+        Path dir = FabricLoader.getInstance().getGameDir().resolve("screenshots");
+        try (Stream<Path> s = Files.list(dir)) {
+            return s.filter(p -> p.toString().endsWith(".png"))
+                    .sorted(Comparator.reverseOrder())
+                    .toList();
+        } catch (NoSuchFileException e) {
+            return List.of();
+        } catch (IOException e) {
+            Lightbox.LOGGER.warn("Couldn't list {}", dir, e);
+            return List.of();
+        }
     }
 }

@@ -7,15 +7,19 @@ import net.minecraft.client.gui.components.SpriteIconButton;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
+import org.lwjgl.glfw.GLFW;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 public class ViewerScreen extends Screen {
     private static final int TOP = 46, BTM = 66;
@@ -31,6 +35,10 @@ public class ViewerScreen extends Screen {
     private double panX = 0, panY = 0;
     private boolean panning = false;
     private double lastMx, lastMy;
+
+    private final List<Path> all;
+    private final int index;
+    private final Component counter;
 
     public ViewerScreen(Screen parent, Path file) {
         super(Component.translatable("lightbox.screen.viewer"));
@@ -55,13 +63,19 @@ public class ViewerScreen extends Screen {
             info.add(Component.literal(when));
             info.add(Component.translatable("lightbox.viewer.nodata"));
         }
+
+        this.all = Actions.listScreenshots();
+        this.index = findIndex(all, file);
+        this.counter = index >= 0
+                ? Component.translatable("lightbox.viewer.counter", index + 1, all.size())
+                : Component.empty();
     }
 
     @Override
     protected void init() {
         // exit and folderBtn on top
         addRenderableWidget(Button.builder(Component.translatable("lightbox.button.back"), _ -> onClose())
-                .bounds(width / 2 - 50, 8, 100, 20).build());
+                .bounds(10, 8, 100, 20).build());
 
         addRenderableWidget(Actions.iconButton("folder", "lightbox.button.folder",
                 width - 30, 8, _ -> Actions.openFolder()));
@@ -90,6 +104,14 @@ public class ViewerScreen extends Screen {
             if (ediBtn) press = _ -> minecraft.gui.setScreen(new EditorScreen(this, file,
                     saved -> minecraft.gui.setScreen(new ViewerScreen(parent, saved))));
 
+            int arrowY = TOP + (height - TOP - BTM) / 2 - 10;
+            Button prev = Actions.iconButton("prev", "lightbox.button.prev", 8, arrowY, _ -> go(-1));
+            Button next = Actions.iconButton("next", "lightbox.button.next", width - 28, arrowY, _ -> go(1));
+            prev.active = index > 0;
+            next.active = index >= 0 && index < all.size() - 1;
+            addRenderableWidget(prev);
+            addRenderableWidget(next);
+
             Button b = SpriteIconButton.builder(tip, press, true)
                     .width(20)
                     .sprite(Lightbox.id( "icon/" + icons[i]), 16, 16)
@@ -117,7 +139,7 @@ public class ViewerScreen extends Screen {
     }
 
     private float fit() {
-        return Math.min((float) (width - 20) / imgW, (float) (height - TOP - BTM) / imgH);
+        return Math.min((float) (width - 60) / imgW, (float) (height - TOP - BTM) / imgH);
     }
 
     private int vw() { return Math.round(imgW * fit()); }
@@ -136,6 +158,26 @@ public class ViewerScreen extends Screen {
 
     private boolean inViewport(double mx, double my) {
         return mx >= vx() && mx < vx() + vw() && my >= vy() && my < vy() + vh();
+    }
+
+    private static int findIndex(List<Path> list, Path file) {
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).getFileName().equals(file.getFileName())) return i;
+        }
+        return -1;
+    }
+
+    private void go(int delta) {
+        int n = index + delta;
+        if (index < 0 || n < 0 || n >= all.size()) return;
+        minecraft.gui.setScreen(new ViewerScreen(parent, all.get(n)));
+    }
+
+    @Override
+    public boolean keyPressed(KeyEvent event) {
+        if (event.key() == GLFW.GLFW_KEY_LEFT | event.key() == GLFW.GLFW_KEY_A) { go(-1); return true; }
+        if (event.key() == GLFW.GLFW_KEY_RIGHT | event.key() == GLFW.GLFW_KEY_D) { go(1); return true; }
+        return super.keyPressed(event);
     }
 
     @Override
@@ -193,6 +235,8 @@ public class ViewerScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
         super.extractRenderState(graphics, mouseX, mouseY, delta);
+
+        graphics.text(font, counter, (width - font.width(counter)) / 2, 14, 0xFF555555, true);
 
         String name = file.getFileName().toString();
         graphics.text(font, name, (width - font.width(name)) / 2, 32, 0xFFFFFFFF, true);
