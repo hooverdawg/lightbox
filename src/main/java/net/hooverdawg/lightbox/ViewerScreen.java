@@ -107,8 +107,7 @@ public class ViewerScreen extends Screen {
         try (InputStream in = Files.newInputStream(file)) {
             NativeImage img = NativeImage.read(in);
             texId = Lightbox.id( "viewer");
-            minecraft.getTextureManager().register(texId,
-                    new DynamicTexture(() -> "lightbox viewer", img));
+            minecraft.getTextureManager().register(texId, new DynamicTexture(() -> "lightbox viewer", img));
             imgW = img.getWidth();
             imgH = img.getHeight();
         } catch (IOException e) {

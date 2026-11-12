@@ -1,15 +1,22 @@
 package net.hooverdawg.lightbox;
 
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.Stream;
 
 import com.mojang.blaze3d.platform.cursor.CursorTypes;
 import com.mojang.blaze3d.platform.NativeImage;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
@@ -22,10 +29,14 @@ import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
+import net.minecraft.util.Util;
+
+import javax.imageio.ImageIO;
 
 public class GalleryScreen extends Screen {
     private static final int CELL_W = 96, CELL_H = 54, GAP = 8, TOP = 30, BTM = 36, MENU_W = 140, ROW_H = 14, LABEL_H = 11;
     private static final int PITCH = CELL_H + LABEL_H + GAP;
+    private static final int THUMB_W = 384;
     private int cellX(int i) { return left() + (i % cols()) * (CELL_W + GAP); }
     private int cellY(int i) { return TOP + GAP + (i / cols()) * PITCH - scroll; }
 
@@ -142,6 +153,8 @@ public class GalleryScreen extends Screen {
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
+        drainLoaded();
+
         selectBtn.setMessage(Component.translatable(selectMode ? "lightbox.button.bulk.stop" : "lightbox.button.bulk"));
         deleteBtn.visible = selectMode;
         deleteBtn.active = !selected.isEmpty();
@@ -158,9 +171,11 @@ public class GalleryScreen extends Screen {
             if (y + CELL_H + LABEL_H < TOP || y > height - BTM) continue; // only load visible
 
             Tex t = getTex(files.get(i));
-            if (t.id() != null) {
+            if (t != null && t.id() != null) {
                 graphics.blit(RenderPipelines.GUI_TEXTURED, t.id(), x, y, 0, 0,
                         CELL_W, CELL_H, t.w(), t.h(), t.w(), t.h());
+            } else {
+                graphics.fill(x, y, x + CELL_W, y + CELL_H, t == null ? 0xFF2A2A2A : 0xFF3A2020);
             }
             graphics.outline(x, y, CELL_W, CELL_H, 0xFF000000);
 
@@ -279,22 +294,79 @@ public class GalleryScreen extends Screen {
     }
 
     private record Tex(Identifier id, int w, int h) {}
+    private record Loaded(Path path, byte[] png) {}
+
     private final Map<Path, Tex> textures = new HashMap<>();
+    private final Queue<Loaded> loaded = new ConcurrentLinkedQueue<>();
+    private final Set<Path> loading = new HashSet<>();
     private int counter = 0;
 
     private Tex getTex(Path file) {
-        return textures.computeIfAbsent(file, p -> {
-            try (InputStream in = Files.newInputStream(p)) {
-                NativeImage img = NativeImage.read(in);
-                Identifier id = Lightbox.id( "shot/" + counter++);
-                minecraft.getTextureManager().register(id,
-                        new DynamicTexture(() -> "lightbox screenshot", img));
-                return new Tex(id, img.getWidth(), img.getHeight());
-            } catch (IOException e) {
-                Lightbox.LOGGER.warn("Couldn't load thumbnail for {}", p, e);
-                return new Tex(null, 0, 0); // rem. fails so we don't retry every frame
+        Tex t = textures.get(file);
+        if (t == null && loading.add(file)) {
+            Util.ioPool().execute(() -> loaded.add(new Loaded(file, makeThumb(file))));
+        }
+        return t;
+    }
+
+    private static byte[] makeThumb(Path file) {
+        try {
+            BufferedImage src = ImageIO.read(file.toFile());
+            if (src == null) {
+                Lightbox.LOGGER.warn("{} isn't a readable image", file);
+                return null;
             }
-        });
+            BufferedImage out = src;
+            if (src.getWidth() > THUMB_W) {
+                int th = Math.max(1, Math.round(src.getHeight() * (THUMB_W / (float) src.getWidth())));
+                out = scaleTo(src, THUMB_W, th);
+            }
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            ImageIO.write(out, "png", bos);
+            return bos.toByteArray();
+        } catch (Throwable t) {
+            Lightbox.LOGGER.warn("Couldn't make a thumbnail for {}", file, t);
+            return null;
+        }
+    }
+
+    private static BufferedImage scaleTo(BufferedImage src, int tw, int th) {
+        BufferedImage cur = src;
+        while (cur.getWidth() / 2 >= tw && cur.getHeight() / 2 >= th) {
+            cur = resize(cur, cur.getWidth() / 2, cur.getHeight() / 2);
+        }
+        return resize(cur, tw, th);
+    }
+
+    private static BufferedImage resize(BufferedImage src, int w, int h) {
+        BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = out.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.drawImage(src, 0, 0, w, h, null);
+        g.dispose();
+        return out;
+    }
+
+    private void drainLoaded() {
+        for (int n = 0; n < 4; n++) {
+            Loaded l = loaded.poll();
+            if (l == null) return;
+            loading.remove(l.path());
+            if (textures.containsKey(l.path())) continue;
+
+            Tex t = new Tex(null, 0, 0);
+            if (l.png() != null) {
+                try {
+                    NativeImage img = NativeImage.read(new ByteArrayInputStream(l.png()));
+                    Identifier id = Lightbox.id("shot/" + counter++);
+                    minecraft.getTextureManager().register(id, new DynamicTexture(() -> "lightbox screenshot", img));
+                    t = new Tex(id, img.getWidth(), img.getHeight());
+                } catch (Exception e) {
+                    Lightbox.LOGGER.warn("Couldn't upload thumbnail for {}", l.path(), e);
+                }
+            }
+            textures.put(l.path(), t);
+        }
     }
 
     @Override
@@ -303,6 +375,8 @@ public class GalleryScreen extends Screen {
             if (t.id() != null) minecraft.getTextureManager().release(t.id());
         }
         textures.clear();
+        loading.clear();
+        loaded.clear();
     }
 
     @Override
