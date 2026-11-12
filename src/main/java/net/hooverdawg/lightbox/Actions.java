@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -135,5 +136,36 @@ public final class Actions {
             Lightbox.LOGGER.warn("Couldn't list {}", dir, e);
             return List.of();
         }
+    }
+
+    public static Path duplicate(Path original) {
+        String n = original.getFileName().toString();
+        String stem = n.endsWith(".png") ? n.substring(0, n.length() - 4) : n;
+        stem = stem.replaceFirst("_copy(_\\d+)?$", "");
+
+        Path target = original.resolveSibling(stem + "_copy.png");
+        for (int i = 2; Files.exists(target); i++) {
+            target = original.resolveSibling(stem + "_copy_" + i + ".png");
+        }
+
+        try {
+
+            Files.copy(original, target, StandardCopyOption.COPY_ATTRIBUTES);
+        } catch (IOException e) {
+            Lightbox.LOGGER.warn("Couldn't duplicate {}", original, e);
+            return null;
+        }
+
+        ScreenshotMeta meta = MetaStore.get(n);
+        if (meta != null) MetaStore.put(target.getFileName().toString(), meta);
+        return target;
+    }
+
+    public static void duplicateAndOpen(Minecraft mc, Screen parent, Path file, List<Path> order, int index) {
+        Path copy = duplicate(file);
+        if (copy == null) return;
+        List<Path> o = new ArrayList<>(order);
+        o.add(Math.max(index, 0), copy);
+        mc.gui.setScreen(new ViewerScreen(parent, copy, o));
     }
 }

@@ -11,6 +11,7 @@
   "lightbox.button.delete": "Delete",
   "lightbox.button.delete.locked": "Cannot delete favourites",
   "lightbox.button.delete.selected": "Delete selected (%s)",
+  "lightbox.button.duplicate": "Duplicate",
   "lightbox.button.back": "Back",
   "lightbox.button.bulk": "Bulk delete",
   "lightbox.button.bulk.stop": "Cancel",

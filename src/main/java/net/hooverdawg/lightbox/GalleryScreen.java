@@ -213,6 +213,8 @@ public class GalleryScreen extends Screen {
                         () -> Actions.rename(minecraft, this, f, _ -> minecraft.gui.setScreen(this))),
                 new Entry(Component.translatable("lightbox.button.edit"), true,
                         () -> minecraft.gui.setScreen(new EditorScreen(this, f, _ -> minecraft.gui.setScreen(this)))),
+                new Entry(Component.translatable("lightbox.button.duplicate"), true,
+                        () -> { Actions.duplicate(f); loadFiles(); }),
                 new Entry(Component.translatable(fav ? "lightbox.button.delete.locked" : "lightbox.button.delete"),
                         !fav, () -> Actions.askDelete(minecraft, f, this, this))
         );

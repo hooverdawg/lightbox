@@ -92,7 +92,7 @@ public class ViewerScreen extends Screen {
                 width - 30, 8, _ -> Actions.openFolder()));
 
         // actions along bottom
-        String[] icons = {"rename", "favourite", "edit", "delete"};
+        String[] icons = {"rename", "favourite", "edit", "duplicate", "delete"};
         boolean isFav = Favourites.isFav(file.getFileName().toString());
         int gap = 4;
         int startX = (width - (icons.length * 20 + (icons.length - 1) * gap)) / 2;
@@ -101,6 +101,7 @@ public class ViewerScreen extends Screen {
             boolean delBtn = icons[i].equals("delete");
             boolean renBtn = icons[i].equals("rename");
             boolean ediBtn = icons[i].equals("edit");
+            boolean dupBtn = icons[i].equals("duplicate");
 
             Component tip = Component.translatable(
                 favBtn && isFav ? "lightbox.button.unfavourite"
@@ -118,6 +119,7 @@ public class ViewerScreen extends Screen {
             });
             if (ediBtn) press = _ -> minecraft.gui.setScreen(new EditorScreen(this, file,
                     saved -> minecraft.gui.setScreen(new ViewerScreen(parent, saved, all))));
+            if (dupBtn) press = _ -> Actions.duplicateAndOpen(minecraft, parent, file, all, index);
 
             int arrowY = TOP + (height - TOP - BTM) / 2 - 10;
             Button prev = Actions.iconButton("prev", "lightbox.button.prev", 8, arrowY, _ -> go(-1));
@@ -133,7 +135,7 @@ public class ViewerScreen extends Screen {
                     .build();
             b.setPosition(startX + i * (20 + gap), height - 28);
             b.setTooltip(Tooltip.create(tip));
-            b.active = favBtn || renBtn || ediBtn || (delBtn && !isFav); // delete greyed out for favourites
+            b.active = favBtn || renBtn || ediBtn || dupBtn || (delBtn && !isFav); // delete greyed out for favourites
             addRenderableWidget(b);
         }
 
