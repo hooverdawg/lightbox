@@ -5,6 +5,9 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -13,6 +16,8 @@ import com.mojang.blaze3d.platform.cursor.CursorTypes;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -27,9 +32,8 @@ import net.minecraft.util.Util;
 import javax.imageio.ImageIO;
 
 public class GalleryScreen extends Screen {
-    private static final int CELL_W = 96, CELL_H = 54, GAP = 8, TOP = 30, BTM = 36, MENU_W = 140, ROW_H = 14, LABEL_H = 11;
+    private static final int CELL_W = 96, CELL_H = 54, GAP = 8, TOP = 56, BTM = 36, MENU_W = 140, ROW_H = 14, LABEL_H = 11, THUMB_W = 384;
     private static final int PITCH = CELL_H + LABEL_H + GAP;
-    private static final int THUMB_W = 384;
     private int cellX(int i) { return left() + (i % cols()) * (CELL_W + GAP); }
     private int cellY(int i) { return TOP + GAP + (i / cols()) * PITCH - scroll; }
 
@@ -43,7 +47,17 @@ public class GalleryScreen extends Screen {
 
     private boolean selectMode = false;
     private final Set<String> selected = new HashSet<>();
-    private Button selectBtn, deleteBtn, doneBtn;
+    private Button selectBtn, deleteBtn, doneBtn, sortBtn, favBtn;
+
+    private enum Sort { NEWEST, OLDEST, A_Z, Z_A, FAVS }
+    private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
+
+    private Sort sort = Sort.NEWEST;
+    private boolean favOnly = false;
+    private String searchText = "";
+    private List<Path> allFiles = List.of();
+    private final Map<Path, String> hay = new HashMap<>();
+    private EditBox searchBox;
 
     public GalleryScreen(Screen parent) {
         super(Component.translatable("lightbox.screen.gallery"));
@@ -63,16 +77,90 @@ public class GalleryScreen extends Screen {
                 .bounds(width - 80, 6, 70, 20).build();
         addRenderableWidget(selectBtn);
 
-        addRenderableWidget(Actions.iconButton("folder", "lightbox.button.folder",
-                width - 80 - 24, 6, _ -> Actions.openFolder()));
-
         deleteBtn = Button.builder(Component.empty(), _ -> askDeleteSelected())
                 .bounds(width / 2 + 6, height - 28, 130, 20).build();
         addRenderableWidget(deleteBtn);
+
+        addRenderableWidget(Actions.iconButton("folder", "lightbox.button.folder",
+                width - 80 - 24, 6, _ -> Actions.openFolder()));
+
+        int rowY = 28, sx = (width - 288) / 2;
+
+        searchBox = new EditBox(font, sx, rowY, 150, 20, Component.translatable("lightbox.search.label"));
+        searchBox.setMaxLength(60);
+        searchBox.setHint(Component.translatable("lightbox.search.hint"));
+        searchBox.setValue(searchText);
+        searchBox.setResponder(s -> { searchText = s; scroll = 0; applyView(); });
+        addRenderableWidget(searchBox);
+
+        sortBtn = Button.builder(Component.empty(), _ -> cycleSort())
+                .bounds(sx + 154, rowY, 110, 20).build();
+        sortBtn.setTooltip(Tooltip.create(Component.translatable("lightbox.sort.tooltip")));
+        addRenderableWidget(sortBtn);
+
+        favBtn = Actions.iconButton("favourite", "lightbox.search.favs", sx + 268, rowY, _ -> {
+            favOnly = !favOnly; scroll = 0; applyView(); });
+        addRenderableWidget(favBtn);
     }
 
     private void loadFiles() {
-        files = Actions.listScreenshots();
+        allFiles = Actions.listScreenshots();
+
+        hay.clear();
+        for (Path p : allFiles) {
+            String name = p.getFileName().toString();
+            StringBuilder sb = new StringBuilder(name);
+            ScreenshotMeta m = MetaStore.get(name);
+            if (m != null) {
+                sb.append(' ').append(m.world()).append(' ').append(DATE.format(Instant.ofEpochMilli(m.time())));
+            }
+            hay.put(p, sb.toString().toLowerCase(Locale.ROOT));
+        }
+        applyView();
+    }
+
+    private boolean matches(Path p, String query) {
+        String h = hay.get(p);
+        if (h == null) return true;
+        for (String w : query.split("\\s+")) {
+            if (!h.contains(w)) return false;
+        }
+        return true;
+    }
+
+    private void applyView() {
+        String q = searchText.trim().toLowerCase(Locale.ROOT);
+        List<Path> out = new ArrayList<>();
+        for (Path p : allFiles) {
+            if (favOnly && !Favourites.isFav(p.getFileName().toString())) continue;
+            if (!q.isEmpty() && !matches(p, q)) continue;
+            out.add(p);
+        }
+
+        switch (sort) {
+            case OLDEST -> Collections.reverse(out);
+            case A_Z -> out.sort(Comparator.comparing((Path p) -> p.getFileName().toString().toLowerCase(Locale.ROOT)));
+            case Z_A -> out.sort(Comparator.comparing((Path p) -> p.getFileName().toString().toLowerCase(Locale.ROOT)).reversed());
+            case FAVS -> {
+                List<Path> favs = new ArrayList<>(), rest = new ArrayList<>();
+                for (Path p : out) (Favourites.isFav(p.getFileName().toString()) ? favs : rest).add(p);
+                favs.addAll(rest);
+                out = favs;
+            }
+            default -> { } // newest
+        }
+        files = out;
+
+        Set<String> visible = new HashSet<>();
+        for (Path p : files) visible.add(p.getFileName().toString());
+        selected.retainAll(visible);
+        scroll = Mth.clamp(scroll, 0, maxScroll());
+    }
+
+    private void cycleSort() {
+        sort = Sort.values()[(sort.ordinal() + 1) % Sort.values().length];
+        scroll = 0;
+        applyView();
     }
 
     private int left() {
@@ -120,7 +208,7 @@ public class GalleryScreen extends Screen {
 
         menu = List.of(
                 new Entry(Component.translatable(fav ? "lightbox.button.unfavourite" : "lightbox.button.favourite"),
-                        true, () -> Favourites.toggle(name)),
+                        true, () -> { Favourites.toggle(name); applyView(); }),
                 new Entry(Component.translatable("lightbox.button.rename"), true,
                         () -> Actions.rename(minecraft, this, f, _ -> minecraft.gui.setScreen(this))),
                 new Entry(Component.translatable("lightbox.button.edit"), true,
@@ -143,9 +231,11 @@ public class GalleryScreen extends Screen {
         deleteBtn.active = !selected.isEmpty();
         deleteBtn.setMessage(Component.translatable("lightbox.button.delete.selected", selected.size()));
         doneBtn.setX(selectMode ? width / 2 - 132 : width / 2 - 65);
+        sortBtn.setMessage(Component.translatable("lightbox.sort." + sort.name().toLowerCase(Locale.ROOT)));
 
         super.extractRenderState(graphics, mouseX, mouseY, delta);
         graphics.text(font, title, (width - font.width(title)) / 2, 12, 0xFFFFFFFF, true);
+        if (favOnly) graphics.outline(favBtn.getX() - 1, favBtn.getY() - 1, favBtn.getWidth() + 2, favBtn.getHeight() + 2, 0xFFFFFF55);
 
         graphics.enableScissor(0, TOP, width, height - BTM);
         for (int i = 0; i < files.size(); i++) {
@@ -184,6 +274,11 @@ public class GalleryScreen extends Screen {
             }
         }
         graphics.disableScissor();
+
+        if (files.isEmpty()) {
+            Component msg = Component.translatable("lightbox.gallery.empty");
+            graphics.text(font, msg, (width - font.width(msg)) / 2, TOP + 30, 0xFFAAAAAA, true);
+        }
 
         if (!menu.isEmpty()) {
             int h = menu.size() * ROW_H + 4;
@@ -240,7 +335,7 @@ public class GalleryScreen extends Screen {
             return true;
         }
         if (event.button() == 0) {
-            minecraft.gui.setScreen(new ViewerScreen(this, files.get(i)));
+            minecraft.gui.setScreen(new ViewerScreen(this, files.get(i), files));
             return true;
         }
         if (event.button() == 1) {
@@ -252,7 +347,7 @@ public class GalleryScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent event) {
-        if (LightboxClient.galleryKey.matches(event)) {
+        if (!searchBox.isFocused() && LightboxClient.galleryKey.matches(event)) {
             onClose();
             return true;
         }

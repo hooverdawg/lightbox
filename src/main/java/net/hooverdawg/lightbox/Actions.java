@@ -16,13 +16,45 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.util.Comparator;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.*;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public final class Actions {
     private Actions() {}
+
+    private static final Pattern NAME_TIME = Pattern.compile("^(\\d{4}-\\d{2}-\\d{2}_\\d{2}\\.\\d{2}\\.\\d{2})");
+    private static final DateTimeFormatter NAME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH.mm.ss");
+
+    private static long takenTime(Path p) {
+        String name = p.getFileName().toString();
+
+        ScreenshotMeta m = MetaStore.get(name);
+        if (m != null) return m.time();
+
+        Matcher mt = NAME_TIME.matcher(name);
+        if (mt.find()) {
+            try {
+                return LocalDateTime.parse(mt.group(1), NAME_FMT)
+                        .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+            } catch (DateTimeParseException ignored) {
+                // no date
+            }
+        }
+
+        try {
+            return Files.getLastModifiedTime(p).toMillis();
+        } catch (IOException e) {
+            return 0L;
+        }
+    }
 
     private static void deleteQuietly(Path f) {
         try {
@@ -89,9 +121,14 @@ public final class Actions {
     public static List<Path> listScreenshots() {
         Path dir = FabricLoader.getInstance().getGameDir().resolve("screenshots");
         try (Stream<Path> s = Files.list(dir)) {
-            return s.filter(p -> p.toString().endsWith(".png"))
-                    .sorted(Comparator.reverseOrder())
-                    .toList();
+            List<Path> out = new ArrayList<>(s.filter(p -> p.toString().endsWith(".png")).toList());
+
+            Map<Path, Long> taken = new HashMap<>();
+            for (Path p : out) taken.put(p, takenTime(p));
+
+            out.sort(Comparator.<Path>comparingLong(taken::get).reversed()
+                    .thenComparing(Comparator.<Path>reverseOrder()));
+            return out;
         } catch (NoSuchFileException e) {
             return List.of();
         } catch (IOException e) {

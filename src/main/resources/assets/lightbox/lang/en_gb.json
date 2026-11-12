@@ -52,6 +52,16 @@
   "lightbox.save.copy": "Save as copy",
   "lightbox.save.overwrite": "Overwrite image",
   "lightbox.save.failed": "Couldn't save the image",
+  "lightbox.search.label": "Search",
+  "lightbox.search.hint": "Name, world, or date",
+  "lightbox.search.favs": "Show favourites only",
+  "lightbox.sort.tooltip": "Sort by...",
+  "lightbox.sort.newest": "Newest first",
+  "lightbox.sort.oldest": "Oldest first",
+  "lightbox.sort.a_z": "A to Z",
+  "lightbox.sort.z_a": "Z to A",
+  "lightbox.sort.favs": "Favourites first",
+  "lightbox.gallery.empty": "No screenshots found",
   "key.category.lightbox.screenshots": "Lightbox",
   "key.lightbox.gallery": "Open Screenshot Gallery"
 }

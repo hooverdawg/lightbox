@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 public class ViewerScreen extends Screen {
@@ -41,6 +42,10 @@ public class ViewerScreen extends Screen {
     private final Component counter;
 
     public ViewerScreen(Screen parent, Path file) {
+        this(parent, file, Actions.listScreenshots());
+    }
+
+    public ViewerScreen(Screen parent, Path file, List<Path> order) {
         super(Component.translatable("lightbox.screen.viewer"));
         this.parent = parent;
         this.file = file;
@@ -64,8 +69,14 @@ public class ViewerScreen extends Screen {
             info.add(Component.translatable("lightbox.viewer.nodata"));
         }
 
-        this.all = Actions.listScreenshots();
-        this.index = findIndex(all, file);
+        List<Path> list = order;
+        int idx = findIndex(list, file);
+        if (idx < 0) {
+            list = Actions.listScreenshots();
+            idx = findIndex(list, file);
+        }
+        this.all = list;
+        this.index = idx;
         this.counter = index >= 0
                 ? Component.translatable("lightbox.viewer.counter", index + 1, all.size())
                 : Component.empty();
@@ -100,9 +111,13 @@ public class ViewerScreen extends Screen {
             Button.OnPress press = _ -> {};
             if (favBtn) press = _ -> toggleFav();
             if (delBtn) press = _ -> Actions.askDelete(minecraft, file, this, parent);
-            if (renBtn) press = _ -> Actions.rename(minecraft, this, file, t -> minecraft.gui.setScreen(new ViewerScreen(parent, t)));
+            if (renBtn) press = _ -> Actions.rename(minecraft, this, file, t -> {
+                List<Path> o = new ArrayList<>(all);
+                if (index >= 0) o.set(index, t);
+                minecraft.gui.setScreen(new ViewerScreen(parent, t, o));
+            });
             if (ediBtn) press = _ -> minecraft.gui.setScreen(new EditorScreen(this, file,
-                    saved -> minecraft.gui.setScreen(new ViewerScreen(parent, saved))));
+                    saved -> minecraft.gui.setScreen(new ViewerScreen(parent, saved, all))));
 
             int arrowY = TOP + (height - TOP - BTM) / 2 - 10;
             Button prev = Actions.iconButton("prev", "lightbox.button.prev", 8, arrowY, _ -> go(-1));
@@ -170,7 +185,7 @@ public class ViewerScreen extends Screen {
     private void go(int delta) {
         int n = index + delta;
         if (index < 0 || n < 0 || n >= all.size()) return;
-        minecraft.gui.setScreen(new ViewerScreen(parent, all.get(n)));
+        minecraft.gui.setScreen(new ViewerScreen(parent, all.get(n), all));
     }
 
     @Override
