@@ -59,6 +59,8 @@ public class GalleryScreen extends Screen {
     private final Map<Path, String> hay = new HashMap<>();
     private EditBox searchBox;
 
+    private boolean skipReload = false;
+
     public GalleryScreen(Screen parent) {
         super(Component.translatable("lightbox.screen.gallery"));
         this.parent = parent;
@@ -66,7 +68,7 @@ public class GalleryScreen extends Screen {
 
     @Override
     protected void init() {
-        loadFiles();
+        if (skipReload) skipReload = false; else loadFiles();
         scroll = Mth.clamp(scroll, 0, maxScroll());
 
         doneBtn = Button.builder(CommonComponents.GUI_DONE, _ -> onClose())
@@ -99,7 +101,7 @@ public class GalleryScreen extends Screen {
         addRenderableWidget(sortBtn);
 
         favBtn = Actions.iconButton("favourite", "lightbox.search.favs", sx + 268, rowY, _ -> {
-            favOnly = !favOnly; scroll = 0; applyView(); });
+            favOnly = !favOnly; scroll = 0; applyView(); rebuildKeepList(); });
         addRenderableWidget(favBtn);
     }
 
@@ -161,6 +163,7 @@ public class GalleryScreen extends Screen {
         sort = Sort.values()[(sort.ordinal() + 1) % Sort.values().length];
         scroll = 0;
         applyView();
+        rebuildKeepList();
     }
 
     private int left() {
@@ -360,7 +363,13 @@ public class GalleryScreen extends Screen {
         selectMode = !selectMode;
         selected.clear();
         menu = List.of();
+        rebuildKeepList();
+    }
+
+    private void rebuildKeepList() {
+        skipReload = true;
         rebuildWidgets();
+        skipReload = false;
     }
 
     private void askDeleteSelected() {
