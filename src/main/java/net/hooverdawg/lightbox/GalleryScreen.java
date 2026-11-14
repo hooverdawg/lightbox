@@ -59,6 +59,11 @@ public class GalleryScreen extends Screen {
     private final Map<Path, String> hay = new HashMap<>();
     private EditBox searchBox;
 
+    private boolean draggingBar = false;
+    private double barGrab = 0;
+    private static final Identifier SCROLL_BG = Identifier.withDefaultNamespace("widget/scroller_background");
+    private static final Identifier SCROLL = Identifier.withDefaultNamespace("widget/scroller");
+
     private boolean skipReload = false;
 
     public GalleryScreen(Screen parent) {
@@ -115,6 +120,8 @@ public class GalleryScreen extends Screen {
             ScreenshotMeta m = MetaStore.get(name);
             if (m != null) {
                 sb.append(' ').append(m.world()).append(' ').append(DATE.format(Instant.ofEpochMilli(m.time())));
+                if (m.dim() != null) sb.append(' ').append(m.dimName().getString());
+                if (m.biome() != null) sb.append(' ').append(m.dimName().getString());
             }
             hay.put(p, sb.toString().toLowerCase(Locale.ROOT));
         }
@@ -179,6 +186,30 @@ public class GalleryScreen extends Screen {
     private int maxScroll() {
         int rows = (files.size() + cols() - 1) / cols();
         return Math.max(0, rows * PITCH + GAP - (height - TOP - BTM));
+    }
+
+    private int trackH() { return height - BTM - TOP;}
+
+    private int thumbH(int max) {
+        int th = trackH();
+        return Math.clamp((int) ((float) th * th / (th + max)), 32, th - 8);
+    }
+
+    private int thumbY(int max) {
+        int span = trackH() - thumbH(max);
+        return TOP + (span <= 0 || max <= 0 ? 0 : Math.round(span * (scroll / (float) max)));
+    }
+
+    private boolean inBarZone(double mx, double my) {
+        return maxScroll() > 0 && mx >= width - 10 && my >= TOP && my < height - BTM;
+    }
+
+    private void dragBarTo(double my) {
+        int max = maxScroll();
+        int span = trackH() - thumbH(max);
+        if (max <= 0 || span <= 0) return;
+        double top = my - barGrab - TOP;
+        scroll = Mth.clamp((int) Math.round(top / span * max), 0, max);
     }
 
     private int indexAt(double mx,  double my) {
@@ -280,6 +311,12 @@ public class GalleryScreen extends Screen {
         }
         graphics.disableScissor();
 
+        int max = maxScroll();
+        if (max > 0) {
+            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, SCROLL_BG, width - 8, TOP, 6, trackH());
+            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, SCROLL, width - 8, thumbY(max), 6, thumbH(max));
+        }
+
         if (files.isEmpty()) {
             Component msg = Component.translatable("lightbox.gallery.empty");
             graphics.text(font, msg, (width - font.width(msg)) / 2, TOP + 30, 0xFFAAAAAA, true);
@@ -319,12 +356,40 @@ public class GalleryScreen extends Screen {
     }
 
     @Override
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        if (draggingBar) {
+            dragBarTo(event.y());
+            return true;
+        }
+        return super.mouseDragged(event, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        if (draggingBar) {
+            draggingBar = false;
+            return true;
+        }
+        return super.mouseReleased(event);
+    }
+
+    @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         if (!menu.isEmpty()) {
             int row = menuRowAt(event.x(), event.y());
             List<Entry> m = menu;
             menu = List.of();
             if (row >= 0 && event.button() == 0 && m.get(row).enabled()) m.get(row).action().run();
+            return true;
+        }
+
+        if (event.button() == 0 && inBarZone(event.x(), event.y())) {
+            int max = maxScroll();
+            int ty = thumbY(max);
+            boolean onThumb = event.y() >= ty && event.y() < ty + thumbH(max);
+            barGrab = onThumb ? event.y() - ty : thumbH(max) / 2.0;
+            draggingBar = true;
+            dragBarTo(event.y());
             return true;
         }
 

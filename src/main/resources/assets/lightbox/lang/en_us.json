@@ -26,7 +26,8 @@
   "lightbox.button.prev": "Previous",
   "lightbox.button.next": "Next",
   "lightbox.viewer.taken": "%s | %s",
-  "lightbox.viewer.coords": "Coordinates: %s, %s, %s | Rotation: %s, %s",
+  "lightbox.viewer.place": "%s  |  %s",
+  "lightbox.viewer.coords": "X: %s | Y: %s | Z: %s | Yaw: %s | Pitch: %s",
   "lightbox.viewer.nodata": "No location data (taken before Lightbox)",
   "lightbox.viewer.counter": "%s / %s",
   "lightbox.editor.loadfail": "Couldn't load this image",
@@ -63,6 +64,9 @@
   "lightbox.sort.z_a": "Z to A",
   "lightbox.sort.favs": "Favorites first",
   "lightbox.gallery.empty": "No screenshots found",
+  "lightbox.dimension.minecraft.overworld": "Overworld",
+  "lightbox.dimension.minecraft.the_nether": "The Nether",
+  "lightbox.dimension.minecraft.the_end": "The End",
   "key.category.lightbox.screenshots": "Lightbox",
   "key.lightbox.gallery": "Open Screenshot Gallery"
 }

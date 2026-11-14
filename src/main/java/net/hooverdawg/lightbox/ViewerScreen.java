@@ -1,6 +1,7 @@
 package net.hooverdawg.lightbox;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.SpriteIconButton;
@@ -23,7 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ViewerScreen extends Screen {
-    private static final int TOP = 46, BTM = 66;
+    private static final int TOP = 46, BTM = 74;
     private final java.util.List<Component> info = new java.util.ArrayList<>();
 
     private final Screen parent;
@@ -60,10 +61,28 @@ public class ViewerScreen extends Screen {
                 .format(java.time.Instant.ofEpochMilli(ms));
 
         if (meta != null) {
-            info.add(Component.translatable("lightbox.viewer.taken", when, meta.world()));
+            info.add(Component.translatable("lightbox.viewer.taken",
+                    tint(when, ChatFormatting.BLUE), tint(meta.world(), ChatFormatting.WHITE))
+                    .withStyle(ChatFormatting.DARK_GRAY));
             info.add(Component.translatable("lightbox.viewer.coords",
-                    String.format("%.1f", meta.x()), String.format("%.1f", meta.y()), String.format("%.1f", meta.z()),
-                    String.format("%.1f", meta.yaw()), String.format("%.1f", meta.pitch())));
+                    tint(f(meta.x()), ChatFormatting.RED),
+                    tint(f(meta.y()), ChatFormatting.GREEN),
+                    tint(f(meta.z()), ChatFormatting.AQUA),
+                    tint(f(meta.yaw()), ChatFormatting.YELLOW),
+                    tint(f(meta.pitch()), ChatFormatting.YELLOW))
+                    .withStyle(ChatFormatting.DARK_GRAY));
+
+            Component dim = meta.dimName(), bio = meta.biomeName();
+            Component dimC = dim == null ? null : tint(dim, dimColour(meta.dim()));
+            Component bioC = bio == null ? null : tint(bio, ChatFormatting.GOLD);
+            if (dimC != null && bioC != null) {
+                info.add(Component.translatable("lightbox.viewer.place", dimC, bioC).withStyle(ChatFormatting.DARK_GRAY));
+            } else if (dimC != null) {
+                info.add(dimC);
+            } else if (bioC != null) {
+                info.add(bioC);
+            }
+
         } else {
             info.add(Component.literal(when));
             info.add(Component.translatable("lightbox.viewer.nodata"));
@@ -282,13 +301,36 @@ public class ViewerScreen extends Screen {
         }
 
         int stripTop = height - BTM + 2;
-        graphics.fill(0, stripTop, width, stripTop + info.size() * 12 + 4, 0x90000000);
+        int stripBtm = Math.min(stripTop + info.size() * 12 + 4, height - 32);
+        graphics.fill(0, stripTop, width, stripBtm, 0x90000000);
 
         int ty = height - BTM + 6;
         for (Component line : info) {
             graphics.text(font, line, (width - font.width(line)) / 2, ty, 0xFFFFFFFF, true);
             ty += 12;
         }
+    }
+
+    private static Component tint(String s, ChatFormatting c) {
+        return Component.literal(s).withStyle(c);
+    }
+
+    private static Component tint(Component co, ChatFormatting c) {
+        return co.copy().withStyle(c);
+    }
+
+    private static String f(double v) {
+        return String.format("%.1f", v);
+    }
+
+    private static ChatFormatting dimColour(String id) {
+        if (id == null) return ChatFormatting.WHITE;
+        return switch (id) {
+            case "minecraft:overworld" -> ChatFormatting.DARK_GREEN;
+            case "minecraft:the_nether" -> ChatFormatting.DARK_RED;
+            case "minecraft:the_end" -> ChatFormatting.DARK_PURPLE;
+            default -> ChatFormatting.GOLD; // modded dimensions
+        };
     }
 
     private void toggleFav() {

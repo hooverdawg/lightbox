@@ -26,7 +26,8 @@
   "lightbox.button.prev": "Previous",
   "lightbox.button.next": "Next",
   "lightbox.viewer.taken": "%s | %s",
-  "lightbox.viewer.coords": "Coordinates: %s, %s, %s | Rotation: %s, %s",
+  "lightbox.viewer.place": "%s  |  %s",
+  "lightbox.viewer.coords": "X: %s | Y: %s | Z: %s | Yaw: %s | Pitch: %s",
   "lightbox.viewer.nodata": "No location data (taken before Lightbox)",
   "lightbox.viewer.counter": "%s / %s",
   "lightbox.editor.loadfail": "Couldn't load this image",
@@ -54,7 +55,7 @@
   "lightbox.save.overwrite": "Overwrite image",
   "lightbox.save.failed": "Couldn't save the image",
   "lightbox.search.label": "Search",
-  "lightbox.search.hint": "Name, world, or date",
+  "lightbox.search.hint": "Name, world, biome, or date",
   "lightbox.search.favs": "Show favourites only",
   "lightbox.sort.tooltip": "Sort by...",
   "lightbox.sort.newest": "Newest first",
@@ -63,6 +64,9 @@
   "lightbox.sort.z_a": "Z to A",
   "lightbox.sort.favs": "Favourites first",
   "lightbox.gallery.empty": "No screenshots found",
+  "lightbox.dimension.minecraft.overworld": "Overworld",
+  "lightbox.dimension.minecraft.the_nether": "The Nether",
+  "lightbox.dimension.minecraft.the_end": "The End",
   "key.category.lightbox.screenshots": "Lightbox",
   "key.lightbox.gallery": "Open Screenshot Gallery"
 }

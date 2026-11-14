@@ -73,13 +73,20 @@ public final class MetaStore {
 
     // snapshot of where player is. null if not in world
     public static ScreenshotMeta capture(Minecraft mc) {
+        String dim = null, biome = null;
+
         if (mc.player == null) return null;
         String world = "Unknown";
         var server = mc.getSingleplayerServer();
         if (server != null) world = server.getWorldData().getLevelName();
         else if (mc.getCurrentServer() != null) world = mc.getCurrentServer().name;
+        if (mc.level != null) {
+            dim = mc.level.dimension().identifier().toString();
+            biome = mc.level.getBiome(mc.player.blockPosition()).unwrapKey()
+                    .map(k -> k.identifier().toString()).orElse(null);
+        }
 
         return new ScreenshotMeta(world, mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                mc.player.getYRot(), mc.player.getXRot(), System.currentTimeMillis());
+                mc.player.getYRot(), mc.player.getXRot(), System.currentTimeMillis(), dim, biome);
     }
 }
