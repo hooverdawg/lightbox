@@ -42,12 +42,15 @@ public class EditorScreen extends Screen {
     private static final int WHEEL_D = 100, WHEEL_TEX = 200, PANEL_W = 116, PANEL_H = 140;
 
     private interface Op {}
-    private enum Tool { BRUSH, TEXT, RECT, ARROW, CROP }
+    private enum Tool { BRUSH, TEXT, RECT, CIRCLE, LINE, ARROW, CROP }
 
     private record Stroke(int rgb, float size, List<double[]> pts) implements Op {}
     private record Rect(int rgb, float size, double x1, double y1, double x2, double y2) implements Op {}
+    private record Circle(int rgb, float size, double x1, double y1, double x2, double y2) implements Op {}
+    private record Line(int rgb, float size, double x1, double y1, double x2, double y2) implements Op {}
     private record Arrow(int rgb, float size, double x1, double y1, double x2, double y2) implements Op {}
     private record Crop(int x, int y, int w, int h) implements Op {}
+
     private record Text(int rgb, float px, double x, double y, String text, TextStyle style) implements Op {}
     private record TextStyle(boolean bold, boolean italic, boolean underline, boolean strike) {}
 
@@ -93,19 +96,20 @@ public class EditorScreen extends Screen {
     @Override
     protected void init() {
         addRenderableWidget(Button.builder(Component.translatable("lightbox.button.back"), _ -> onClose())
-                .bounds(width / 2 - 50, 8, 100, 20).build());
+                .bounds(10, 8, 100, 20).build());
 
         // toolbar down left side
-        addIcon("brush", 10, TOP, true, () -> tool = Tool.BRUSH);
-        addIcon("text", 10, TOP + 24, true, () -> {tool = Tool.TEXT; setInitialFocus(textBox);});
-        addIcon("rectangle", 10, TOP + 48, true, () -> tool = Tool.RECT);
-        addIcon("arrow", 10, TOP + 72, true, () -> tool = Tool.ARROW);
-        addIcon("crop", 10, TOP + 96, true, () -> tool = Tool.CROP);
+        String[] toolIcons = {"brush", "text", "rectangle", "circle", "line", "arrow", "crop"};
+        for (Tool t : Tool.values()) {
+            addIcon(toolIcons[t.ordinal()], 10, TOP + t.ordinal() * 24, true, () -> {
+               tool = t;
+               if (t == Tool.TEXT) setInitialFocus(textBox);
+            });
+        }
 
-        int ay = TOP + 5 * 24 + 12;
-        undoBtn = addIcon("undo", 10, ay, false, this::undo);
-        redoBtn = addIcon("redo", 10, ay + 24, false, this::redo);
-        saveBtn = addIcon("save", 10, ay + 48, false, this::openSave);
+        undoBtn = addIcon("undo", width - 30, TOP, false, () -> { undo(); rebuildWidgets(); });
+        redoBtn = addIcon("redo", width - 30, TOP + 24, false, () -> { redo(); rebuildWidgets(); });
+        saveBtn = addIcon("save", width - 30, TOP + 52, false, this::openSave);
 
         // bottom bar - size slider
         addRenderableWidget(new ValueSlider(x0() + 104, height - 30, 204, 20,
@@ -348,6 +352,17 @@ public class EditorScreen extends Screen {
             g.draw(new Rectangle2D.Double(Math.min(r.x1(), r.x2()), Math.min(r.y1(), r.y2()),
                     Math.abs(r.x2() - r.x1()), Math.abs(r.y2() - r.y1())));
 
+        } else if (op instanceof Circle c) {
+            g.setColor(new Color(c.rgb()));
+            g.setStroke(new BasicStroke(c.size()));
+            g.draw(new Ellipse2D.Double(Math.min(c.x1(), c.x2()), Math.min(c.y1(), c.y2()),
+                    Math.abs(c.x2() - c.x1()), Math.abs(c.y2() - c.y1())));
+
+        } else if (op instanceof Line l) {
+            g.setColor(new Color(l.rgb()));
+            g.setStroke(new BasicStroke(l.size(), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g.draw(new Line2D.Double(l.x1(), l.y1(), l.x2(), l.y2()));
+
         } else if (op instanceof Arrow a) { // arrow tool
             g.setColor(new Color(a.rgb()));
             double[] geo = arrowGeo(a.x1(), a.y1(), a.x2(), a.y2(), a.size());
@@ -359,6 +374,7 @@ public class EditorScreen extends Screen {
             head.lineTo(geo[4], geo[5]);
             head.closePath();
             g.fill(head);
+
         } else if (op instanceof Text t) { // text tool
             try {
                 g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
@@ -373,6 +389,17 @@ public class EditorScreen extends Screen {
 
         g.dispose();
         return img;
+    }
+
+    private double[] constrain(double[] a, double bx, double by) {
+        double dx = bx - a[0], dy = by - a[1];
+        if (tool == Tool.RECT || tool == Tool.CIRCLE) {
+            double s = Math.max(Math.abs(dx), Math.abs(dy));
+            return new double[] {a[0] + Math.copySign(s, dx), a[1] + Math.copySign(s, dy)};
+        }
+        double len = Math.hypot(dx, dy);
+        double ang = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+        return new double[] {a[0] + Math.cos(ang) * len, a[1] + Math.sin(ang) * len};
     }
 
     private void commit(Op op) {
@@ -493,7 +520,10 @@ public class EditorScreen extends Screen {
             return true;
         }
         if (shapeA != null) {
-            shapeB = new double[] {toImgX(event.x()), toImgY(event.y())};
+            double bx = toImgX(event.x()), by = toImgY(event.y());
+            shapeB = event.hasShiftDown() && tool != Tool.CROP
+                    ? constrain(shapeA, bx, by)
+                    : new double[] {bx, by};
             return true;
         }
         if (drawing != null) {
@@ -522,9 +552,12 @@ public class EditorScreen extends Screen {
                 if (tool == Tool.CROP) {
                     cropTo(a,b);
                 } else {
-                    commit(tool == Tool.RECT
-                        ? new Rect(rgb(), (float) brush, a[0], a[1], b[0], b[1])
-                        : new Arrow(rgb(), (float) brush, a[0], a[1], b[0], b[1]));
+                    commit(switch (tool) {
+                        case RECT -> new Rect(rgb(), (float) brush, a[0], a[1], b[0], b[1]);
+                        case CIRCLE -> new Circle(rgb(), (float) brush, a[0], a[1], b[0], b[1]);
+                        case LINE -> new Line(rgb(), (float) brush, a[0], a[1], b[0], b[1]);
+                        default -> new Arrow(rgb(), (float) brush, a[0], a[1], b[0], b[1]);
+                    });
                 }
             }
             return true;
@@ -552,7 +585,7 @@ public class EditorScreen extends Screen {
 
         super.extractRenderState(graphics, mouseX, mouseY, delta);
 
-        int hy = switch (tool) { case BRUSH -> TOP; case TEXT -> TOP + 24; case RECT -> TOP + 48; case ARROW -> TOP + 72; case CROP -> TOP + 96; };
+        int hy = TOP + tool.ordinal() * 24;
         graphics.outline(8, hy - 2, 24, 24, 0xFFFFFF55);
 
         if (texId == null) {
@@ -593,26 +626,39 @@ public class EditorScreen extends Screen {
             }
             graphics.disableScissor();
         }
-        if (shapeA != null && tool != Tool.CROP) { // shape tools - rect, arrow
+        if (shapeA != null && tool != Tool.CROP) { // shape tools - rect, circle, line, arrow
             graphics.enableScissor(ox, oy, ox + dw, oy + dh);
             int argb = 0xFF000000 | rgb();
             int d = Math.max(1, Math.round((float) brush * scale));
             double[] a = shapeA, b = shapeB;
-            if (tool == Tool.RECT) { // if rect
-                stampLine(graphics, a[0], a[1], b[0], a[1], d, argb);
-                stampLine(graphics, b[0], a[1], b[0], b[1], d, argb);
-                stampLine(graphics, b[0], b[1], a[0], b[1], d, argb);
-                stampLine(graphics, a[0], b[1], a[0], a[1], d, argb);
-            } else { // if arrow
-                double[] geo = arrowGeo(a[0], a[1], b[0], b[1], brush);
-                stampLine(graphics, a[0], a[1], b[0], b[1], d, argb);
-                stampLine(graphics, b[0], b[1], geo[2], geo[3], d, argb);
-                stampLine(graphics, b[0], b[1], geo[4], geo[5], d, argb);
-                stampLine(graphics, geo[2], geo[3], geo[4], geo[5], d, argb);
+            switch (tool) {
+                case RECT -> { // if rect
+                    stampLine(graphics, a[0], a[1], b[0], a[1], d, argb);
+                    stampLine(graphics, b[0], a[1], b[0], b[1], d, argb);
+                    stampLine(graphics, b[0], b[1], a[0], b[1], d, argb);
+                    stampLine(graphics, a[0], b[1], a[0], a[1], d, argb);
+                }
+                case CIRCLE -> { // if circle
+                    double cx = (a[0] + b[0]) / 2, cy = (a[1] + b[1]) / 2;
+                    double rx = Math.abs(b[0] - a[0]) / 2, ry = Math.abs(b[1] - a[1]) / 2;
+                    int n = Math.max(24, (int) (Math.PI * (rx + ry) * scale / Math.max(1.0, d / 2.0)));
+                    for (int i = 0; i < n; i++) {
+                        double t = 2 * Math.PI * i / n;
+                        stamp(graphics, cx + rx * Math.cos(t), cy + ry * Math.sin(t), d, argb);
+                    }
+                }
+                case LINE -> stampLine(graphics, a[0], a[1], b[0], b[1], d, argb); // if line
+                default -> { // if arrow
+                    double[] geo = arrowGeo(a[0], a[1], b[0], b[1], brush);
+                    stampLine(graphics, a[0], a[1], b[0], b[1], d, argb);
+                    stampLine(graphics, b[0], b[1], geo[2], geo[3], d, argb);
+                    stampLine(graphics, b[0], b[1], geo[4], geo[5], d, argb);
+                    stampLine(graphics, geo[2], geo[3], geo[4], geo[5], d, argb);
+                }
             }
             graphics.disableScissor();
         }
-        if (shapeA != null && tool == Tool.CROP) {
+        if (shapeA != null && tool == Tool.CROP) { // crop tool
             double lx = cl(Math.min(shapeA[0], shapeB[0]), 0, imgW), rx = cl(Math.max(shapeA[0], shapeB[0]), 0, imgW);
             double top = cl(Math.min(shapeA[1], shapeB[1]), 0, imgH), btm = cl(Math.max(shapeA[1], shapeB[1]), 0, imgH);
             int sx1 = ox + (int) Math.round(lx * scale), sx2 = ox + (int) Math.round(rx * scale);

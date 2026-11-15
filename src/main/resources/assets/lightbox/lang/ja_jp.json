@@ -18,6 +18,8 @@
   "lightbox.button.brush": "ブラシ",
   "lightbox.button.text": "テキスト",
   "lightbox.button.rectangle": "四角形",
+  "lightbox.button.circle": "サークル",
+  "lightbox.button.line": "路線",
   "lightbox.button.arrow": "矢印",
   "lightbox.button.crop": "切り抜き",
   "lightbox.button.undo": "元に戻す",

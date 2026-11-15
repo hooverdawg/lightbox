@@ -18,6 +18,8 @@
   "lightbox.button.brush": "Brush",
   "lightbox.button.text": "Text",
   "lightbox.button.rectangle": "Rectangle",
+  "lightbox.button.circle": "Circle",
+  "lightbox.button.line": "Line",
   "lightbox.button.arrow": "Arrow",
   "lightbox.button.crop": "Crop",
   "lightbox.button.undo": "Undo",

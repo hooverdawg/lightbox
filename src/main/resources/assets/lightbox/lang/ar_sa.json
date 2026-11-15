@@ -18,6 +18,8 @@
   "lightbox.button.brush": "فرشاة",
   "lightbox.button.text": "نص",
   "lightbox.button.rectangle": "مستطيل",
+  "lightbox.button.circle": "الدائرة",
+  "lightbox.button.line": "الخط",
   "lightbox.button.arrow": "سهم",
   "lightbox.button.crop": "قص",
   "lightbox.button.undo": "تراجع",

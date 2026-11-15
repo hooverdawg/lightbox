@@ -18,6 +18,8 @@
   "lightbox.button.brush": "Pinceau",
   "lightbox.button.text": "Texte",
   "lightbox.button.rectangle": "Rectangle",
+  "lightbox.button.circle": "Cercle",
+  "lightbox.button.line": "Ligne",
   "lightbox.button.arrow": "Flèche",
   "lightbox.button.crop": "Rogner",
   "lightbox.button.undo": "Annuler",

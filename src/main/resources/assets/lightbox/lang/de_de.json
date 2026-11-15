@@ -18,6 +18,8 @@
   "lightbox.button.brush": "Pinsel",
   "lightbox.button.text": "Text",
   "lightbox.button.rectangle": "Rechteck",
+  "lightbox.button.circle": "Kreis",
+  "lightbox.button.line": "Linie",
   "lightbox.button.arrow": "Pfeil",
   "lightbox.button.crop": "Zuschneiden",
   "lightbox.button.undo": "Rückgängig",

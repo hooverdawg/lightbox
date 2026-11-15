@@ -55,7 +55,7 @@ public class ViewerScreen extends Screen {
         ScreenshotMeta meta = MetaStore.get(file.getFileName().toString());
         long ms;
         try { ms = meta != null ? meta.time() : Files.getLastModifiedTime(file).toMillis(); }
-        catch (IOException e) {ms = 0;}
+        catch (IOException e) { ms = 0;}
         String when = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
                 .withZone(java.time.ZoneId.systemDefault())
                 .format(java.time.Instant.ofEpochMilli(ms));
