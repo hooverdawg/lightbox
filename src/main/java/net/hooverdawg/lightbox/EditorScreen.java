@@ -39,7 +39,7 @@ import org.lwjgl.glfw.GLFW;
 
 public class EditorScreen extends Screen {
     private static final int SIDE = 40, TOP = 36, BTM = 70;
-    private static final int WHEEL_D = 100, WHEEL_TEX = 200, PANEL_W = 116, PANEL_H = 140;
+    private static final int WHEEL_D = 100, WHEEL_TEX = 200, PANEL_W = 116, PANEL_H = 190;
 
     private interface Op {}
     private enum Tool { BRUSH, TEXT, RECT, CIRCLE, LINE, ARROW, CROP }
@@ -71,7 +71,8 @@ public class EditorScreen extends Screen {
     private int ox, oy, dw, dh;
 
     private final Consumer<Path> onSaved;
-    private Button undoBtn, redoBtn, saveBtn;
+    private Button undoBtn, redoBtn, saveBtn, pickBtn;
+    private boolean pickMode = false;
 
     //tool states
     private Tool tool = Tool.BRUSH;
@@ -107,6 +108,7 @@ public class EditorScreen extends Screen {
             });
         }
 
+        // right side helper buttons
         undoBtn = addIcon("undo", width - 30, TOP, false, () -> { undo(); rebuildWidgets(); });
         redoBtn = addIcon("redo", width - 30, TOP + 24, false, () -> { redo(); rebuildWidgets(); });
         saveBtn = addIcon("save", width - 30, TOP + 52, false, this::openSave);
@@ -114,6 +116,9 @@ public class EditorScreen extends Screen {
         // bottom bar - size slider
         addRenderableWidget(new ValueSlider(x0() + 104, height - 30, 204, 20,
                 "lightbox.editor.size", 1, 60, brush, v -> brush = v));
+
+        // eyedropper
+        pickBtn = addIcon("picker", x0() - 24, height - 30, true, () -> { pickMode = !pickMode; rebuildWidgets(); });
 
         // text box (when text button selected)
         textWidgets.clear();
@@ -224,6 +229,56 @@ public class EditorScreen extends Screen {
         g.drawImage(src, 0, 0, null);
         g.dispose();
         return c;
+    }
+
+    private void setColour(int rgb) {
+        float[] hsb = Color.RGBtoHSB((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, null);
+        hue = hsb[0];
+        sat = hsb[1];
+        val = hsb[2];
+    }
+
+    private void pickAt(double mx, double my) {
+        int px = (int) cl(toImgX(mx), 0, current.getWidth() - 1);
+        int py = (int) cl(toImgY(my), 0, current.getHeight() - 1);
+        setColour(current.getRGB(px, py) & 0xFFFFFFFF);
+    }
+
+    private static int rgbOf(Op op) {
+        return switch (op) {
+            case Stroke s -> s.rgb();
+            case Rect r -> r.rgb();
+            case Circle c -> c.rgb();
+            case Line l -> l.rgb();
+            case Arrow a -> a.rgb();
+            case Text t -> t.rgb();
+            default -> -1;
+        };
+    }
+
+    private int recentY() { return panelY() + 148; }
+    private int savedY() { return panelY() + 172; }
+
+    private int swatchAt(double mx, double my, int rowY) {
+        if (my < rowY || my >= rowY + 10) return -1;
+        double rel = mx - barX();
+        if (rel < 0 || rel >= 96) return -1;
+        int i = (int) (rel / 12);
+        return rel - i * 12 < 10 ? i : -1;
+    }
+
+    private void drawSwatches(GuiGraphicsExtractor g, List<Integer> colours, int y, boolean plus) {
+        int cur = rgb();
+        for (int i = 0; i < colours.size(); i++) {
+            int x = barX() + i * 12;
+            g.fill(x, y, x + 10, y + 10, 0xFF000000 | colours.get(i));
+            g.outline(x, y, 10, 10, colours.get(i) == cur ? 0xFFFFFFFF : 0xFF555555);
+        }
+        if (plus) {
+            int x = barX() + colours.size() * 12;
+            g.outline(x, y, 10, 10, 0xFF888888);
+            g.text(font, "+", x + 3, y + 1, 0xFFFFFFFF, false);
+        }
     }
 
     private void loadBase() {
@@ -403,6 +458,7 @@ public class EditorScreen extends Screen {
     }
 
     private void commit(Op op) {
+        if (rgbOf(op) >= 0) Palette.used(rgbOf(op));
         ops.add(op);
         redoStack.clear();
         current = applyOp(current, op);
@@ -470,6 +526,20 @@ public class EditorScreen extends Screen {
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         double mx = event.x(), my = event.y();
 
+        if (event.button() == 1) {
+            if (paletteOpen && inPanel(mx, my)) {
+                int s = swatchAt(mx, my, savedY());
+                if (s >= 0) Palette.removeSaved(s);
+                return true;
+            }
+            paletteOpen = false;
+            if (texId != null && insideImage(mx, my)) {
+                pickAt(mx, my);
+                return true;
+            }
+            return false;
+        }
+
         if (event.button() == 0) {
             if (paletteOpen && inPanel(mx, my)) {
                 if (inWheel(mx, my)) {
@@ -478,6 +548,15 @@ public class EditorScreen extends Screen {
                 } else if (inBar(mx,my)) {
                     pickingBright = true;
                     pickBright(mx);
+                } else {
+                    List<Integer> recent = Palette.recent();
+                    int r = swatchAt(mx, my, recentY());
+                    if (r >= 0 && r < recent.size()) setColour(recent.get(r));
+
+                    List<Integer> saved = Palette.saved();
+                    int s = swatchAt(mx, my, savedY());
+                    if (s >= 0 && s < saved.size()) setColour(saved.get(s));
+                    else if (s == saved.size()) Palette.addSaved(rgb());
                 }
                 return true;
             }
@@ -490,6 +569,11 @@ public class EditorScreen extends Screen {
         if (super.mouseClicked(event, doubleClick)) return true; // buttons & size slider
         if (event.button() == 0 && texId != null && insideImage(mx, my)) {
             double ix = toImgX(mx), iy = toImgY(my);
+            if (pickMode) {
+                pickAt(mx, my);
+                pickMode = false;
+                return true;
+            }
             if (tool == Tool.TEXT) {
                 String s = textBox.getValue();
                 if (!s.isBlank()) {
@@ -587,6 +671,7 @@ public class EditorScreen extends Screen {
 
         int hy = TOP + tool.ordinal() * 24;
         graphics.outline(8, hy - 2, 24, 24, 0xFFFFFF55);
+        if (pickMode) graphics.outline(pickBtn.getX() - 1, pickBtn.getY() - 1, 22, 22, 0xFFFFFF55);
 
         if (texId == null) {
             if (loadFailed) {
@@ -728,6 +813,12 @@ public class EditorScreen extends Screen {
         int vx = barX() + Math.round(val * 99);
         graphics.fill(vx - 2, barY() - 2, vx + 2, barY() + 22, 0xFF000000);
         graphics.fill(vx - 1, barY() - 2, vx + 1, barY() + 22, 0xFFFFFFFF);
+
+        // recent/saved buttons
+        graphics.text(font, Component.translatable("lightbox.editor.recent"), barX(), panelY() + 138, 0xFFAAAAAA, false);
+        drawSwatches(graphics, Palette.recent(), recentY(), false);
+        graphics.text(font, Component.translatable("lightbox.editor.saved"), barX(), panelY() + 162, 0xFFAAAAAA, false);
+        drawSwatches(graphics, Palette.saved(), savedY(), true);
     }
 
     private void stamp(GuiGraphicsExtractor g, double ix, double iy, int d, int argb) {
@@ -763,10 +854,8 @@ public class EditorScreen extends Screen {
 
     @Override
     public void onClose() {
-        if (paletteOpen) {
-            paletteOpen = false;
-            return;
-        }
+        if (pickMode) { pickMode = false; return; }
+        if (paletteOpen) { paletteOpen = false; return; }
         if (!ops.isEmpty()) { //unsaved edits
             minecraft.gui.setScreen(new ConfirmScreen(
                     discard -> minecraft.gui.setScreen(discard ? parent : this),
