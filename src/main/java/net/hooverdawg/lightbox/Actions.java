@@ -34,7 +34,7 @@ public final class Actions {
     private static final Pattern NAME_TIME = Pattern.compile("^(\\d{4}-\\d{2}-\\d{2}_\\d{2}\\.\\d{2}\\.\\d{2})");
     private static final DateTimeFormatter NAME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH.mm.ss");
 
-    private static long takenTime(Path p) {
+    public static long takenTime(Path p) {
         String name = p.getFileName().toString();
 
         ScreenshotMeta m = MetaStore.get(name);

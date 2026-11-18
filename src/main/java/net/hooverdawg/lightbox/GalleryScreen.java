@@ -6,12 +6,15 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.TextStyle;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.blaze3d.platform.cursor.CursorTypes;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -32,10 +35,11 @@ import net.minecraft.util.Util;
 import javax.imageio.ImageIO;
 
 public class GalleryScreen extends Screen {
-    private static final int CELL_W = 96, CELL_H = 54, GAP = 8, TOP = 56, BTM = 36, MENU_W = 140, ROW_H = 14, LABEL_H = 11, THUMB_W = 384;
+    private static final int CELL_W = 96, CELL_H = 54, GAP = 8, TOP = 56, BTM = 36, MENU_W = 140, ROW_H = 14, LABEL_H = 11, THUMB_W = 384, HEAD_H = 14;
     private static final int PITCH = CELL_H + LABEL_H + GAP;
-    private int cellX(int i) { return left() + (i % cols()) * (CELL_W + GAP); }
-    private int cellY(int i) { return TOP + GAP + (i / cols()) * PITCH - scroll; }
+    private int cellX(int i) { return left() + cellCol[i] * (CELL_W + GAP); }
+    private int cellY(int i) { return TOP + cellRow[i] - scroll; }
+    private int contentH = GAP;
 
     private final Screen parent;
     private List<Path> files = List.of();
@@ -49,15 +53,21 @@ public class GalleryScreen extends Screen {
     private final Set<String> selected = new HashSet<>();
     private Button selectBtn, deleteBtn, doneBtn, sortBtn, favBtn;
 
-    private enum Sort { NEWEST, OLDEST, A_Z, Z_A, FAVS }
+    private enum Sort { NEWEST, OLDEST, A_Z, Z_A, FAVS, UNSORTED }
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
 
-    private Sort sort = Sort.NEWEST;
+    private Sort sort = Sort.UNSORTED;
     private boolean favOnly = false;
     private String searchText = "";
     private List<Path> allFiles = List.of();
     private final Map<Path, String> hay = new HashMap<>();
     private EditBox searchBox;
+
+    private record Header(String text, int y) {}
+    private int[] cellCol = new int[0], cellRow = new int[0];
+    private List<Header> headers = List.of();
+    private final Map<Path, LocalDate> days = new HashMap<>();
+    private LocalDate today = LocalDate.now();
 
     private boolean draggingBar = false;
     private double barGrab = 0;
@@ -74,6 +84,7 @@ public class GalleryScreen extends Screen {
     @Override
     protected void init() {
         if (skipReload) skipReload = false; else loadFiles();
+        computeLayout();
         scroll = Mth.clamp(scroll, 0, maxScroll());
 
         doneBtn = Button.builder(CommonComponents.GUI_DONE, _ -> onClose())
@@ -114,6 +125,7 @@ public class GalleryScreen extends Screen {
         allFiles = Actions.listScreenshots();
 
         hay.clear();
+        days.clear();
         for (Path p : allFiles) {
             String name = p.getFileName().toString();
             StringBuilder sb = new StringBuilder(name);
@@ -124,6 +136,7 @@ public class GalleryScreen extends Screen {
                 if (m.biome() != null) sb.append(' ').append(m.dimName().getString());
             }
             hay.put(p, sb.toString().toLowerCase(Locale.ROOT));
+            days.put(p, Instant.ofEpochMilli(Actions.takenTime(p)).atZone(ZoneId.systemDefault()).toLocalDate());
         }
         applyView();
     }
@@ -159,6 +172,7 @@ public class GalleryScreen extends Screen {
             default -> { } // newest
         }
         files = out;
+        computeLayout();
 
         Set<String> visible = new HashSet<>();
         for (Path p : files) visible.add(p.getFileName().toString());
@@ -173,6 +187,65 @@ public class GalleryScreen extends Screen {
         rebuildKeepList();
     }
 
+    private static String ordinal(int n) {
+        if (n % 100 >= 11 && n % 100 <= 13) return n + "th"; // 11th, 12th, 13th
+        return n + switch (n % 10) {
+            case 1 -> "st";
+            case 2 -> "nd";
+            case 3 -> "rd";
+            default -> "th";
+        };
+    }
+
+    private String dayLabel(LocalDate d) {
+        if (d == null) return "?";
+        if (d.equals(today)) return Component.translatable("lightbox.group.today").getString();
+        if (d.equals(today.minusDays(1))) return Component.translatable("lightbox.group.yesterday").getString();
+
+        String s = ordinal(d.getDayOfMonth()) + " " + d.getMonth().getDisplayName(TextStyle.FULL, Locale.getDefault());
+        return d.getYear() == today.getYear() ? s : s + " " + d.getYear();
+    }
+
+    private String groupLabel(Path p) {
+        String name = p.getFileName().toString();
+        return switch (sort) {
+            case NEWEST, OLDEST -> dayLabel(days.get(p));
+            case A_Z, Z_A -> {
+                char c = name.isEmpty() ? '#' : Character.toUpperCase(name.charAt(0));
+                yield Character.isLetter(c) ? String.valueOf(c) : "#";
+            }
+            case FAVS -> Component.translatable(Favourites.isFav(name) ? "lightbox.group.favs" : "lightbox.group.rest").getString();
+            case UNSORTED -> Component.translatable("lightbox.group.all").getString();
+        };
+    }
+
+    private void computeLayout() {
+        today = LocalDate.now();
+        int n = files.size(), cols = cols();
+        cellCol = new int[n];
+        cellRow = new int[n];
+        headers = new ArrayList<>();
+
+        int y = GAP, i = 0;
+        while (i < n) {
+            String label = groupLabel(files.get(i));
+            int j = i + 1;
+            while (j < n && groupLabel(files.get(j)).equals(label)) j++;
+
+            if (i > 0) y += 6;
+            headers.add(new Header(label + " (" + (j - i) + ")", y));
+            y += HEAD_H;
+
+            for (int k = i; k < j; k++) {
+                cellCol[k] = (k - i) % cols;
+                cellRow[k] = y + ((k - i) / cols) * PITCH;
+            }
+            y += ((j - i + cols - 1) / cols) * PITCH;
+            i = j;
+        }
+        contentH = y;
+    }
+
     private int left() {
         int cols = cols();
         int grid_W = cols * CELL_W + (cols - 1) * GAP;
@@ -184,8 +257,7 @@ public class GalleryScreen extends Screen {
     }
 
     private int maxScroll() {
-        int rows = (files.size() + cols() - 1) / cols();
-        return Math.max(0, rows * PITCH + GAP - (height - TOP - BTM));
+        return Math.max(0, contentH - (height - TOP - BTM));
     }
 
     private int trackH() { return height - BTM - TOP;}
@@ -274,6 +346,16 @@ public class GalleryScreen extends Screen {
         if (favOnly) graphics.outline(favBtn.getX() - 1, favBtn.getY() - 1, favBtn.getWidth() + 2, favBtn.getHeight() + 2, 0xFFFFFF55);
 
         graphics.enableScissor(0, TOP, width, height - BTM);
+
+        int gridW = cols() * CELL_W + (cols() - 1) * GAP;
+        for (Header h : headers) {
+            int hy = TOP + h.y() - scroll;
+            if (hy + HEAD_H < TOP || hy > height - BTM) continue;
+            graphics.text(font, h.text, left(), hy + 3, 0xFFFFFFFF, true);
+            int lineX = left() + font.width(h.text()) + 6;
+            graphics.fill(lineX, hy + 7, left() + gridW, hy + 8, 0x70888888);
+        }
+
         for (int i = 0; i < files.size(); i++) {
             int x = cellX(i);
             int y = cellY(i);

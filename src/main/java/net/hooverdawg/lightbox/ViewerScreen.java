@@ -300,11 +300,11 @@ public class ViewerScreen extends Screen {
             graphics.text(font, String.format("x%.1f", zoom), vx + 4, vy + 4, 0xFFFFFFFF, true);
         }
 
-        int stripTop = height - BTM + 2;
-        int stripBtm = Math.min(stripTop + info.size() * 12 + 4, height - 32);
+        int stripTop = height - BTM + 4;
+        int stripBtm = Math.min(stripTop + info.size() * 12 + 6, height - 32);
         graphics.fill(0, stripTop, width, stripBtm, 0x90000000);
 
-        int ty = height - BTM + 6;
+        int ty = height - BTM + 7;
         for (Component line : info) {
             graphics.text(font, line, (width - font.width(line)) / 2, ty, 0xFFFFFFFF, true);
             ty += 12;
